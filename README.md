@@ -6,23 +6,44 @@ This is the official implementation of [Instruct 4D-to-4D](https://immortalco.gi
 
 ## Installation
 
+### Environmental Setups
+
+```bash
+git clone https://github.com/Friedrich-M/Instruct-4D-to-4D.git
+cd Instruct-4D-to-4D
+conda create -n instruct4d python=3.8
+conda activate instruct4d
+pip install -r requirements.txt
+```
+
+### Data Preparation
+
+**For multi-view 4D scenes.** The dataset provided in [DyNeRF](https://github.com/facebookresearch/Neural_3D_Video) is used. You can download scenes from [DyNeRF Dataset](https://github.com/facebookresearch/Neural_3D_Video/releases/tag/v1.0).
+
+**For real dynamic scenes:** The dataset provided in [HyperNeRF](https://github.com/google/hypernerf) is used. You can download scenes from [Hypernerf Dataset](https://github.com/google/hypernerf/releases/tag/v0.1) and organize them as [Nerfies](https://github.com/google/nerfies#datasets). 
+
+**For monocular 4D scenes:** The dataset provided in [DyCheck](https://github.com/KAIR-BAIR/dycheck) is used. You can download scenes from [DyCheck Dataset](https://drive.google.com/drive/folders/1ZYQQh0qkvpoGXFIcK_j4suon1Wt6MXdZ).
+
+
 ## Framework
 
 ### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
 
 To enable InsturctPix2Pix to simultaneously edit multiple frames with batch consistency, we modify the original InstructPix2Pix to be anchor-aware, reffering to some zero-shot video editing works.
 
-### (2) Key Pseido-View Editing (Temporal Consistency)
+### (2) Key Pseudo-View Editing (Temporal Consistency)
 
 ![Flow-guided Sliding Window](./imgs/sliding_window.png)
 
 ### (3) Pseudo-View Propagation (Spatial Consistency)
 
-According to the principal of Perspective Transformation, we could use rendered depth from 4D NeRF and the camera parameters to warp the edited pseudo-view to the target view, while maintaining spatial consistency.
+According to the principal of Perspective Transformation, we could use rendered depth from 4D NeRF with the camera parameters to warp the edited pseudo-view to the target view, while maintaining spatial consistency.
 
 ## Tips
 
-If your edit isn't working as you desire, it is likely because InstructPix2Pix struggles with your images and prompt. We recommend taking one of your training views and trying to edit it in 2D first with InstructPix2Pix, referring to the tips on getting a good edit can be found [here](https://github.com/timothybrooks/instruct-pix2pix#tips).
+[1] **2D Editing Quality.** If your edit isn't working as you desire, it is likely because InstructPix2Pix struggles with your images and prompt. We recommend taking one of your training views and trying to edit it in 2D first with InstructPix2Pix, referring to the tips on getting a good edit can be found [here](https://github.com/timothybrooks/instruct-pix2pix#tips).
+
+[2] **4D Scene Representation.** Our framework is general, and therefore, any 4D scene representation adopting RGB observations as supervision can be used. We encourage to extend our editing pipeline to 4D Gaussian Splatting to make the editing more efficient.
 
 ## Acknowledgement
 
