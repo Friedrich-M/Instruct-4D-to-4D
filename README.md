@@ -24,6 +24,17 @@ pip install -r requirements.txt
 
 **For monocular 4D scenes:** The dataset provided in [DyCheck](https://github.com/KAIR-BAIR/dycheck) is used. You can download scenes from [DyCheck Dataset](https://drive.google.com/drive/folders/1ZYQQh0qkvpoGXFIcK_j4suon1Wt6MXdZ).
 
+## Training
+
+To edit a 4D scene, you must first train a regular 4D NeRF using your data.
+```bash
+pass
+```
+
+Once you have fully trained your scene, the checkpoints will be saved to the outputs directory. To start training for editing the NeRF, run the following command:
+```bash
+pass
+```
 
 ## Framework
 
