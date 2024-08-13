@@ -2,6 +2,19 @@
 
 This is the official implementation of [Instruct 4D-to-4D](https://immortalco.github.io/Instruct-4D-to-4D/).
 
+![Pipeline](./imgs/pipeline.png)
+
+## Framework
+
+### Anchor-Aware Instruct-Pix2Pix (IP2P)
+
+### Key Pseido-View Editing
+
+![Flow-guided Sliding Window](./imgs/sliding_window.png)
+
+### Pseudo-View Propagation
+
+
 ## Tips
 
 If your edit isn't working as you desire, it is likely because InstructPix2Pix struggles with your images and prompt. We recommend taking one of your training views and trying to edit it in 2D first with InstructPix2Pix, referring to the tips on getting a good edit can be found [here](https://github.com/timothybrooks/instruct-pix2pix#tips).
