@@ -1,19 +1,24 @@
-# Instruct-4D-to-4D
+# Instruct 4D-to-4D: Editing 4D Scenes as Pseudo-3D Scenes Using 2D Diffusion
 
 This is the official implementation of [Instruct 4D-to-4D](https://immortalco.github.io/Instruct-4D-to-4D/).
 
 ![Pipeline](./imgs/pipeline.png)
 
+## Installation
+
 ## Framework
 
-### Anchor-Aware Instruct-Pix2Pix (IP2P)
+### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
 
-### Key Pseido-View Editing
+To enable InsturctPix2Pix to simultaneously edit multiple frames with batch consistency, we modify the original InstructPix2Pix to be anchor-aware, reffering to some zero-shot video editing works.
+
+### (2) Key Pseido-View Editing (Temporal Consistency)
 
 ![Flow-guided Sliding Window](./imgs/sliding_window.png)
 
-### Pseudo-View Propagation
+### (3) Pseudo-View Propagation (Spatial Consistency)
 
+According to the principal of Perspective Transformation, we could use rendered depth from 4D NeRF and the camera parameters to warp the edited pseudo-view to the target view, while maintaining spatial consistency.
 
 ## Tips
 
@@ -21,7 +26,7 @@ If your edit isn't working as you desire, it is likely because InstructPix2Pix s
 
 ## Acknowledgement
 
-We would like to thank [Liangchen Song](https://lsongx.github.io/index.html) for providing the codebase of [NeRFPlayer](https://lsongx.github.io/projects/nerfplayer.html) and helpful discussion. We also sincerely thank [Haque, Ayaan](https://www.cs.cmu.edu/~yenchenl/) for kind discussion about 3D scene editing.
+We would like to thank [Liangchen Song](https://lsongx.github.io/index.html) for providing the codebase of [NeRFPlayer](https://lsongx.github.io/projects/nerfplayer.html) and helpful discussion. We also sincerely thank [Haque, Ayaan](https://www.ayaanzhaque.me/) for kind discussion about 3D scene editing.
 
 ## Citation
 
