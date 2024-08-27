@@ -13,6 +13,7 @@ git clone https://github.com/Friedrich-M/Instruct-4D-to-4D.git
 cd Instruct-4D-to-4D
 conda create -n instruct4d python=3.8
 conda activate instruct4d
+pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 --index-url https://download.pytorch.org/whl/cu118
 pip install -r requirements.txt
 ```
 
@@ -37,14 +38,27 @@ pass
 ```
 
 ## Framework
+> We provide some examples below for better understanding our framework.
 
 ### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
 
 To enable InsturctPix2Pix to simultaneously edit multiple frames with batch consistency, we modify the original InstructPix2Pix to be anchor-aware, reffering to some zero-shot video editing works.
+```bash
+# Single IP2P
+python test_ip2p.py --image_path ./examples/coffee_frame_2x/0.png --prompt 'What if it was painted by Van Gogh?' --resize 1024 --steps 20 --guidance_scale 7.5 --image_guidance_scale 1.5
+# Anchor-Aware IP2P
+python test_ip2p_sequence.py --image_dir ./examples/coffee_frame_2x/ --sequence_length 6 --prompt 'What if it was painted by Van Gogh?' --resize 1024 --steps 20 --guidance_scale 7.5 --image_guidance_scale 1.5
+```
 
 ### (2) Key Pseudo-View Editing (Temporal Consistency)
 
 ![Flow-guided Sliding Window](./imgs/sliding_window.png)
+
+```bash
+# Flow-Guided Warping
+python test_flow.py --source_img ./examples/coffee_frame_2x/3.png --target_img ./examples/coffee_frame_2x/6.png
+# Sliding Window Warping
+```
 
 ### (3) Pseudo-View Propagation (Spatial Consistency)
 
@@ -52,7 +66,7 @@ According to the principal of Perspective Transformation, we could use rendered 
 
 ## Tips
 
-[1] **2D Editing Quality.** If your edit isn't working as you desire, it is likely because InstructPix2Pix struggles with your images and prompt. We recommend taking one of your training views and trying to edit it in 2D first with InstructPix2Pix, referring to the tips on getting a good edit can be found [here](https://github.com/timothybrooks/instruct-pix2pix#tips).
+[1] **2D Editing Quality.** If your edit isn't working as you desire, it is likely because InstructPix2Pix struggles with your images and prompt. We recommend taking one of image sets and trying to edit it in 2D first with InstructPix2Pix, referring to the tips on getting a good edit can be found [here](https://github.com/timothybrooks/instruct-pix2pix#tips).
 
 [2] **4D Scene Representation.** Our framework is general, and therefore, any 4D scene representation adopting RGB observations as supervision can be used. We encourage to extend our editing pipeline to 4D Gaussian Splatting to make the editing more efficient.
 
