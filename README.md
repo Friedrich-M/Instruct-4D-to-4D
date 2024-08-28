@@ -37,6 +37,8 @@ Once you have fully trained your scene, the checkpoints will be saved to the out
 ```bash
 python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt --ckpt $CKPT_PATH --prompt 'What if it was painted by Van Gogh?' 
 ```
+- Since we use the **Parallelization** scheme, please make sure you have at least 2 GPUs available. 
+- If you encounter the CUDA out-of-memory issue, please try to reduce the sequence length of Anchor-Aware IP2P.
 
 ## 🔥 Framework
 > We provide some demos below for better understanding our framework components.
@@ -48,7 +50,7 @@ cd ip2p_models && gdown 1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK && tar -xvf examples.t
 
 ### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
 
-To enable InsturctPix2Pix simultaneously edit multiple frames and achieve consistency within the same batch, we modify the attention and convolution structure of original IP2P.
+To enable InsturctPix2Pix simultaneously edit multiple frames and achieve **within-batch consistency**, we modify the attention and convolution structure of original IP2P.
 ```bash
 # Single IP2P
 python test_ip2p.py --image_path ./examples/coffee_frame_2x/0.png --prompt 'What if it was painted by Van Gogh?' --resize 1024 --steps 20 --guidance_scale 10.5 --image_guidance_scale 1.5
@@ -58,7 +60,7 @@ python test_ip2p_sequence.py --image_dir ./examples/coffee_frame_2x/ --sequence_
 
 ### (2) Key Pseudo-View Editing (Temporal Consistency)
 
-Along the temporal dimension, to achieve '**cross-batch consistency**' in long-term sequence editing, we propose flow-guided sliding window warping, with anchor-aware IP2P painting.
+Along the temporal dimension, to achieve **cross-batch consistency** in long-term sequence editing, we propose flow-guided sliding window warping, with anchor-aware IP2P painting.
 
 ![Flow-guided Sliding Window](./imgs/sliding_window.png)
 
@@ -71,7 +73,7 @@ python test_flow_sequence.py --image_dir ./examples/coffee_frame_2x/ --sequence_
 
 ### (3) Pseudo-View Propagation (Spatial Consistency)
 
-According to the principal of Perspective Transformation, we could use rendered depth from 4D NeRF with the camera parameters to warp the edited pseudo-view to the target view, while maintaining spatial consistency.
+According to the principal of Perspective Transformation, we could use rendered depth from 4D NeRF with the camera parameters to warp the edited pseudo-view to the target view, while maintaining **spatial consistency**.
 
 ```bash
 # Depth-Based Warping
