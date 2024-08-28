@@ -38,12 +38,12 @@ Once you have fully trained your scene, the checkpoints will be saved to the out
 pass
 ```
 
-## Framework
+## 🔥 Framework
 > We provide some demos below for better understanding our framework components.
 
-Please dive into the `ip2p_models` directory and download the example files from [Google Drive](https://drive.google.com/drive/folders/1...).
+Please dive into the `ip2p_models` directory and download the example files from [Google Drive](https://drive.google.com/file/d/1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK/view?usp=drive_link).
 ```bash
-gdown && tar -xvf examples.tar.gz
+gdown 1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK && tar -xvf examples.tar.gz
 ```
 
 ### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
