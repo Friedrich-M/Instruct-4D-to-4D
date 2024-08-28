@@ -35,7 +35,7 @@ python stream_train.py --config configs/n3dv/train_coffee_50_2.txt --render_test
 
 Once you have fully trained your scene, the checkpoints will be saved to the outputs directory. To start training for editing the NeRF, run the following command:
 ```bash
-pass
+python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt --ckpt $CKPT_PATH --prompt 'What if it was painted by Van Gogh?' 
 ```
 
 ## 🔥 Framework
@@ -43,7 +43,7 @@ pass
 
 Please dive into the `ip2p_models` directory and download the example files from [Google Drive](https://drive.google.com/file/d/1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK/view?usp=drive_link).
 ```bash
-gdown 1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK && tar -xvf examples.tar.gz
+cd ip2p_models && gdown 1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK && tar -xvf examples.tar.gz
 ```
 
 ### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
