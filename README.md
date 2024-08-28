@@ -27,23 +27,36 @@ pip install -r requirements.txt
 
 **For multi-view 4D scenes.** You can download scenes from [DyNeRF Dataset](https://github.com/facebookresearch/Neural_3D_Video/releases/tag/v1.0).
 ```bash
-mkdir data && cd data 
+mkdir -p data/neural_3d && cd data/neural_3d
 # take coffee_martini as an example
 wget https://github.com/facebookresearch/Neural_3D_Video/releases/download/v1.0/coffee_martini.zip && unzip coffee_martini.zip
+# run the following command to generate the images
+python tools/prepare_video.py data/neural_3d/coffee_martini
 ```
+
+**For single-view 4D scenes.** You can download scenes from [DyCheck Dataset](https://drive.google.com/drive/folders/1ZYQQh0qkvpoGXFIcK_j4suon1Wt6MXdZ).
+
 
 ## 🚀 Training
 
 To edit a 4D scene, you must first train a regular 4D NeRF using your data. For example:
 ```bash
-python stream_train.py --config configs/n3dv/train_coffee_50_2.txt --render_test 1 
+python stream_train.py --config configs/n3dv/train_coffee_50_2.txt \
+    --datadir ./data/neural_3d/coffee_martini \
+    --basedir ./log/neural_3d \
+    --render_test 1 --render_path 1  
 ```
 
-Once you have fully trained your scene, the checkpoints will be saved to the `outputs` directory. We also provide some checkpoints of pre-trained 4D NeRF [here](https://drive.google.com/drive/folders/1ftH5OavgcHS_NTbc1dlDknhZKLhzOdXy?usp=sharing). 
+Once you have fully trained your scene, the checkpoints will be saved to the `log` directory. We also provide some checkpoints of pre-trained 4D NeRF [here](https://drive.google.com/drive/folders/1ftH5OavgcHS_NTbc1dlDknhZKLhzOdXy?usp=sharing). 
 
 To start training for editing the NeRF, run the following command:
 ```bash
-python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt --ckpt $CKPT_PATH --prompt 'What if it was painted by Van Gogh?' 
+python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt \
+    --ckpt ./log/neural_3d/train_coffee_50_2/ckpt-99999.th \
+    --prompt 'What if it was painted by Van Gogh?' \
+    --guidance_scale 9.5 --image_guidance_scale 1.5 \
+    --diffusion_steps 20 --refine_num_steps 600 --refine_diffusion_steps 4 \
+    --restview_refine_num_steps 700 --restview_refine_diffusion_steps 6
 ```
 *Training tips:*
 - Since we use the **Parallelization** scheme, please make sure you have at least 2 GPUs available. 
