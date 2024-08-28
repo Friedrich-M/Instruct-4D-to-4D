@@ -4,7 +4,7 @@ This is the official implementation of [Instruct 4D-to-4D](https://immortalco.gi
 
 ![Pipeline](./imgs/pipeline.png)
 
-## Installation
+## 🔧 Installation
 
 ### Environmental Setups
 
@@ -19,17 +19,18 @@ pip install -r requirements.txt
 
 ### Data Preparation
 
-**For multi-view 4D scenes.** The dataset provided in [DyNeRF](https://github.com/facebookresearch/Neural_3D_Video) is used. You can download scenes from [DyNeRF Dataset](https://github.com/facebookresearch/Neural_3D_Video/releases/tag/v1.0).
+**For multi-view 4D scenes.** You can download scenes from [DyNeRF Dataset](https://github.com/facebookresearch/Neural_3D_Video/releases/tag/v1.0).
+```bash
+mkdir data && cd data 
+# take coffee_martini as an example
+wget https://github.com/facebookresearch/Neural_3D_Video/releases/download/v1.0/coffee_martini.zip && unzip coffee_martini.zip
+```
 
-**For real dynamic scenes:** The dataset provided in [HyperNeRF](https://github.com/google/hypernerf) is used. You can download scenes from [Hypernerf Dataset](https://github.com/google/hypernerf/releases/tag/v0.1) and organize them as [Nerfies](https://github.com/google/nerfies#datasets). 
-
-**For monocular 4D scenes:** The dataset provided in [DyCheck](https://github.com/KAIR-BAIR/dycheck) is used. You can download scenes from [DyCheck Dataset](https://drive.google.com/drive/folders/1ZYQQh0qkvpoGXFIcK_j4suon1Wt6MXdZ).
-
-## Training
+## 🚀 Training
 
 To edit a 4D scene, you must first train a regular 4D NeRF using your data.
 ```bash
-pass
+python stream_train.py --config configs/n3dv/train_coffee_50_2.txt --render_test 1 
 ```
 
 Once you have fully trained your scene, the checkpoints will be saved to the outputs directory. To start training for editing the NeRF, run the following command:
@@ -38,11 +39,16 @@ pass
 ```
 
 ## Framework
-> We provide some examples below for better understanding our framework.
+> We provide some demos below for better understanding our framework components.
+
+Please dive into the `ip2p_models` directory and download the example files from [Google Drive](https://drive.google.com/drive/folders/1...).
+```bash
+gdown && tar -xvf examples.tar.gz
+```
 
 ### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
 
-To enable InsturctPix2Pix to simultaneously edit multiple frames with batch consistency, we modify the original InstructPix2Pix to be anchor-aware.
+To enable InsturctPix2Pix simultaneously edit multiple frames and achieve consistency within the same batch, we modify the attention and convolution structure of original IP2P.
 ```bash
 # Single IP2P
 python test_ip2p.py --image_path ./examples/coffee_frame_2x/0.png --prompt 'What if it was painted by Van Gogh?' --resize 1024 --steps 20 --guidance_scale 10.5 --image_guidance_scale 1.5
@@ -72,17 +78,20 @@ According to the principal of Perspective Transformation, we could use rendered 
 python test_depth.py --source_img ./examples/coffee_cam_2x/0.png --target_img ./examples/coffee_cam_2x/1.png --prompt 'What if it was painted by Van Gogh?' --guidance_scale 10.5 --image_guidance_scale 1.5 --pts_path ./examples/pts_0.pt --warp_path ./examples/warp_0.pt
 ```
 
-## Notes
+## 📂 Notes
 
-[1] **2D Editing Quality.** If your edit isn't working as you desire, it is likely because InstructPix2Pix struggles with your images and prompt. We recommend taking one of image sets and trying to edit it in 2D first with InstructPix2Pix, referring to the tips on getting a good edit can be found [here](https://github.com/timothybrooks/instruct-pix2pix#tips).
+[1] **2D Editing Quality.** If your edit isn't working as you desire, it is likely because InstructPix2Pix struggles with your images and prompt. We recommend taking one of your images and trying to edit it in 2D first with InstructPix2Pix, referring to the tips on getting a good edit can be found [here](https://github.com/timothybrooks/instruct-pix2pix#tips).
+```bash
+python test_ip2p.py --image_path $IMAGE_PATH --prompt $PROMPT
+```
 
-[2] **4D Scene Representation.** Our framework is general, and therefore, any 4D scene representation adopting RGB observations as supervision can be used. We encourage to extend our editing pipeline to 4D Gaussian Splatting to make the editing more efficient.
+[2] **4D Scene Representation.** Our framework is general, and therefore, any 4D scene representation adopting RGB observations as supervision can be used. We encourage to extend our editing pipeline to **4D Gaussian Splatting** to make the editing more efficient.
 
 ## Acknowledgement
 
 We would like to thank [Liangchen Song](https://lsongx.github.io/index.html) for providing the codebase of [NeRFPlayer](https://lsongx.github.io/projects/nerfplayer.html) and helpful discussion. We also sincerely thank [Haque, Ayaan](https://www.ayaanzhaque.me/) for kind discussion about 3D scene editing.
 
-## Citation
+## 📝 Citation
 
 You can find our paper on [arXiv](https://arxiv.org/abs/2406.09402).
 
