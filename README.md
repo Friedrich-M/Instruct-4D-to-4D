@@ -28,25 +28,25 @@ wget https://github.com/facebookresearch/Neural_3D_Video/releases/download/v1.0/
 
 ## 🚀 Training
 
-To edit a 4D scene, you must first train a regular 4D NeRF using your data.
+To edit a 4D scene, you must first train a regular 4D NeRF using your data. For example:
 ```bash
 python stream_train.py --config configs/n3dv/train_coffee_50_2.txt --render_test 1 
 ```
 
-Once you have fully trained your scene, the checkpoints will be saved to the outputs directory. To start training for editing the NeRF, run the following command:
+Once you have fully trained your scene, the checkpoints will be saved to the `outputs` directory. We also provide some checkpoints of pre-trained 4D NeRF [here](https://drive.google.com/drive/folders/1ftH5OavgcHS_NTbc1dlDknhZKLhzOdXy?usp=sharing). 
+
+To start training for editing the NeRF, run the following command:
 ```bash
 python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt --ckpt $CKPT_PATH --prompt 'What if it was painted by Van Gogh?' 
 ```
+*Training tips:*
 - Since we use the **Parallelization** scheme, please make sure you have at least 2 GPUs available. 
-- If you encounter the CUDA out-of-memory issue, please try to reduce the sequence length of Anchor-Aware IP2P.
+- If you encounter the CUDA OOM issue, please try to reduce the sequence length of Anchor-Aware IP2P.
 
 ## 🔥 Framework
 > We provide some demos below for better understanding our framework components.
 
 Please dive into the `ip2p_models` directory and download the example files from [Google Drive](https://drive.google.com/file/d/1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK/view?usp=drive_link).
-```bash
-cd ip2p_models && gdown 1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK && tar -xvf examples.tar.gz
-```
 
 ### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
 
