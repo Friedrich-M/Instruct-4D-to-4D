@@ -42,7 +42,7 @@ pass
 
 ### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
 
-To enable InsturctPix2Pix to simultaneously edit multiple frames with batch consistency, we modify the original InstructPix2Pix to be anchor-aware, reffering to some zero-shot video editing works.
+To enable InsturctPix2Pix to simultaneously edit multiple frames with batch consistency, we modify the original InstructPix2Pix to be anchor-aware.
 ```bash
 # Single IP2P
 python test_ip2p.py --image_path ./examples/coffee_frame_2x/0.png --prompt 'What if it was painted by Van Gogh?' --resize 1024 --steps 20 --guidance_scale 10.5 --image_guidance_scale 1.5
@@ -52,7 +52,7 @@ python test_ip2p_sequence.py --image_dir ./examples/coffee_frame_2x/ --sequence_
 
 ### (2) Key Pseudo-View Editing (Temporal Consistency)
 
-Along the temporal dimension, to achieve 'cross-batch consistency' in long-term sequence editing, we propose Flow-Guided Sliding Window Warping.
+Along the temporal dimension, to achieve '**cross-batch consistency**' in long-term sequence editing, we propose flow-guided sliding window warping, with anchor-aware IP2P painting.
 
 ![Flow-guided Sliding Window](./imgs/sliding_window.png)
 
