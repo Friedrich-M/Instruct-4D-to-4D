@@ -63,7 +63,8 @@ python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt \
 *4D Editing tips:*
 - Since we use the **Parallelization** scheme, please make sure you have at least 2 GPUs available. 
 - If you encounter the CUDA OOM issue, please try to reduce the sequence length of Anchor-Aware IP2P.
-- If you have any other questions, please feel free to open an issue.
+
+> If you have any other questions, please feel free to open an issue.
 
 ## 🔥 Framework
 > We provide some demos below for better understanding our framework components.
@@ -75,9 +76,15 @@ Please dive into the `ip2p_models` directory and download the example files from
 To enable InsturctPix2Pix simultaneously edit multiple frames and achieve **within-batch consistency**, we modify the attention and convolution structure of original IP2P.
 ```bash
 # Single IP2P
-python test_ip2p.py --image_path ./examples/coffee_frame_2x/0.png --prompt 'What if it was painted by Van Gogh?' --resize 1024 --steps 20 --guidance_scale 10.5 --image_guidance_scale 1.5
+python test_ip2p.py --image_path ./examples/coffee_frame_2x/0.png \
+    --prompt 'What if it was painted by Van Gogh?' \
+    --resize 1024 --steps 20 \
+    --guidance_scale 10.5 --image_guidance_scale 1.5
 # Anchor-Aware IP2P
-python test_ip2p_sequence.py --image_dir ./examples/coffee_frame_2x/ --sequence_length 6 --prompt 'What if it was painted by Van Gogh?' --resize 1024 --steps 20 --guidance_scale 10.5 --image_guidance_scale 1.5
+python test_ip2p_sequence.py --image_dir ./examples/coffee_frame_2x/ \
+    --prompt 'What if it was painted by Van Gogh?' \
+    --sequence_length 6 --resize 1024 --steps 20 \
+    --guidance_scale 10.5 --image_guidance_scale 1.5
 ```
 
 ### (2) Key Pseudo-View Editing (Temporal Consistency)
@@ -88,9 +95,16 @@ Along the temporal dimension, to achieve **cross-batch consistency** in long-ter
 
 ```bash
 # Flow-Guided Warping
-python test_flow.py --source_img ./examples/coffee_frame_2x/3.png --target_img ./examples/coffee_frame_2x/6.png
+python test_flow.py \
+    --source_img ./examples/coffee_frame_2x/3.png \
+    --target_img ./examples/coffee_frame_2x/6.png
 # Sliding Window Warping w/ Anchor-Aware IP2P Painting
-python test_flow_sequence.py --image_dir ./examples/coffee_frame_2x/ --sequence_length 6 --prompt 'What if it was painted by Van Gogh?' --resize 1024 --guidance_scale 10.5 --image_guidance_scale 1.5 --painting_diffusion_steps 5 --painting_num_train_timesteps 600
+python test_flow_sequence.py \
+    --image_dir ./examples/coffee_frame_2x/ \
+    --prompt 'What if it was painted by Van Gogh?' \
+    --sequence_length 6 --resize 1024 \
+    --guidance_scale 10.5 --image_guidance_scale 1.5 \
+    --painting_diffusion_steps 5 --painting_num_train_timesteps 600
 ```
 
 ### (3) Pseudo-View Propagation (Spatial Consistency)
@@ -99,7 +113,12 @@ According to the principal of Perspective Transformation, we could use rendered 
 
 ```bash
 # Depth-Based Warping
-python test_depth.py --source_img ./examples/coffee_cam_2x/0.png --target_img ./examples/coffee_cam_2x/1.png --prompt 'What if it was painted by Van Gogh?' --guidance_scale 10.5 --image_guidance_scale 1.5 --pts_path ./examples/pts_0.pt --warp_path ./examples/warp_0.pt
+python test_depth.py \
+    --source_img ./examples/coffee_cam_2x/0.png \
+    --target_img ./examples/coffee_cam_2x/1.png \
+    --prompt 'What if it was painted by Van Gogh?' \
+    --guidance_scale 10.5 --image_guidance_scale 1.5 \
+    --pts_path ./examples/pts_0.pt --warp_path ./examples/warp_0.pt
 ```
 
 ## 📂 Notes
