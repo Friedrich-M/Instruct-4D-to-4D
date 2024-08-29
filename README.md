@@ -71,6 +71,10 @@ python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt \
 
 Please dive into the `ip2p_models` directory and download the example files from [Google Drive](https://drive.google.com/file/d/1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK/view?usp=drive_link).
 
+```bash
+gdown 1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK
+```
+
 ### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
 
 To enable InsturctPix2Pix simultaneously edit multiple frames and achieve **within-batch consistency**, we modify the attention and convolution structure of original IP2P.
@@ -110,6 +114,8 @@ python test_flow_sequence.py \
 ### (3) Pseudo-View Propagation (Spatial Consistency)
 
 According to the principal of Perspective Transformation, we could use rendered depth from 4D NeRF with the camera parameters to warp the edited pseudo-view to the target view, while maintaining **spatial consistency**.
+
+![Depth-based Warping](./imgs/warp.png)
 
 ```bash
 # Depth-Based Warping
