@@ -29,7 +29,7 @@ pip install -r requirements.txt
 ```bash
 mkdir -p data/neural_3d && cd data/neural_3d
 # take coffee_martini as an example
-wget https://github.com/facebookresearch/Neural_3D_Video/releases/download/v1.0/coffee_martini.zip && unzip coffee_martini.zip
+wget https://github.com/facebookresearch/Neural_3D_Video/releases/download/v1.0/coffee_martini.zip && unzip coffee_martini.zip && cd ../..
 # run the following command to generate the images
 python tools/prepare_video.py data/neural_3d/coffee_martini
 ```

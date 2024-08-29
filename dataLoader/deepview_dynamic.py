@@ -4,7 +4,7 @@ from tqdm import tqdm
 import numpy as np
 import os
 from torchvision import transforms as T
-import mmcv
+import mmengine
 
 from .ray_utils import *
 from .deepview_static import *
@@ -56,7 +56,7 @@ class DeepviewDynamicDataset(Dataset):
             subset = [0]
             # subset = subset
             
-        data_dict = mmcv.load(f'{self.root_dir}/data_dict.json')
+        data_dict = mmengine.load(f'{self.root_dir}/data_dict.json')
         center = torch.as_tensor(data_dict['center'])
         scale = torch.as_tensor(data_dict['scale'])
         
