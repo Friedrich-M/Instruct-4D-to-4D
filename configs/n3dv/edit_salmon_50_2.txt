@@ -1,0 +1,39 @@
+dataset_name = n3dv_dynamic
+datadir = /scratch/bbsh/linzhan/data/neural_3d/flame_salmon_1
+expname = edit_salmon_50_2
+basedir = /scratch/bbsh/linzhan/log/neural_3d
+cache   = /scratch/bbsh/linzhan/cache/neural_3d
+add_timestamp = 1
+
+downsample_train = 2.0
+ndc_ray = 1
+num_frames = 50
+frame_list = "180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229"
+ld_per_frame = 1.0
+
+n_iters = 20000
+batch_size = 4096
+
+N_voxel_init = 2097156 # 128**3
+N_voxel_final = 262144000 # 640**3
+upsamp_list = [2000,4000,8000,10000]
+update_AlphaMask_list = [-1]
+
+N_vis = -1 # vis all testing images
+vis_every = 7000
+
+render_test = 1
+render_path = 1
+
+n_lamb_sigma = [16,4,4]
+n_lamb_sh = [48,12,12]
+
+shadingMode = MLP_Fea
+fea2denseAct = relu
+
+view_pe = 0
+fea_pe = 0
+
+TV_weight_density = 1.0
+TV_weight_app = 1.0
+#feat_diff_weight = 0.001
