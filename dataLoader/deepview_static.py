@@ -11,7 +11,7 @@ import json
 from packaging import version as pver
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
-import mmcv
+import mmengine
 
 from .ray_utils import *
 
@@ -325,7 +325,7 @@ class DeepviewDataset(Dataset):
         # near /= scale
         # far /= scale
 
-        data_dict = mmcv.load(f'{self.root_dir}/data_dict.json')
+        data_dict = mmengine.load(f'{self.root_dir}/data_dict.json')
         center = torch.as_tensor(data_dict['center']).to(rays_o)
         scale = torch.as_tensor(data_dict['scale']).to(rays_o)
         print(center, scale)

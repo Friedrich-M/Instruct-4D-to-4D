@@ -10,7 +10,7 @@ import datetime
 from dataLoader import dataset_dict
 import sys
 
-import mmcv
+import mmengine
 import configargparse
 
 def config_parser(cmd=None):
@@ -128,7 +128,7 @@ def config_parser(cmd=None):
                         help='N images to vis')
     parser.add_argument("--vis_every", type=int, default=10000,
                         help='frequency of visualize the image')
-    parser.add_argument('--cfg_options', nargs='+', action=mmcv.DictAction,)
+    parser.add_argument('--cfg_options', nargs='+', action=mmengine.DictAction,)
     if cmd is not None:
         return parser.parse_args(cmd)
     else:
@@ -506,7 +506,7 @@ if __name__ == '__main__':
     args = config_parser()
     args.datadir = os.path.expanduser(args.datadir)
     args.frame_list = eval(args.frame_list)
-    args = mmcv.Config(vars(args))
+    args = mmengine.Config(vars(args))
     if args.cfg_options is not None:
         args.merge_from_dict(args.cfg_options)
     args.deform_field = None
@@ -519,7 +519,7 @@ if __name__ == '__main__':
         export_mesh(args)
 
     if args.render_only and (args.render_test or args.render_path):
-        targs = mmcv.Config.fromfile(f'{os.path.dirname(args.ckpt)}/config.py')
+        targs = mmengine.Config.fromfile(f'{os.path.dirname(args.ckpt)}/config.py')
         targs.merge_from_dict(args)
         render_test(targs)
     else:
