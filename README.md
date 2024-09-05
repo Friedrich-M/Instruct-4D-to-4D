@@ -10,6 +10,7 @@
 
 ![Pipeline](./imgs/pipeline.png)
 This is the official implementation of [Instruct 4D-to-4D](https://immortalco.github.io/Instruct-4D-to-4D/).
+
 ## 🔧 Installation
 
 ### Environmental Setups
@@ -65,6 +66,12 @@ python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt \
 - If you encounter the CUDA OOM issue, please try to reduce the sequence length of Anchor-Aware IP2P.
 
 > If you have any other questions, please feel free to open an issue.
+
+## 📜 TODO List
+- [ ] Release the codebase of single-view setting (within one week)
+- [ ] Replace the NeRF backbone with 4D GS
+- [ ] Provide the pipeline of original version (key-view editing -> pseudo-view propagation)
+
 
 ## 🔥 Framework
 > We provide some demos below for better understanding our framework components.
