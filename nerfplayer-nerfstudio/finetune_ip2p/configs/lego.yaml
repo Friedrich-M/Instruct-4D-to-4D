@@ -1,0 +1,36 @@
+pretrained_model_path: "timbrooks/instruct-pix2pix"
+ddim_source: "CompVis/stable-diffusion-v1-4"
+output_dir: "./output/lego6"
+
+train_data:
+  data_path: "./data/lego.mp4"
+  prompt: ""
+  n_sample_frames: 20
+  width: 512
+  height: 512
+  sample_start_idx: 0
+  sample_frame_rate: 2
+
+validation_data:
+  prompts:
+    - "convert it to silver metal machine style"
+  video_length: 20
+  width: 512
+  height: 512
+  num_inference_steps: 50
+  guidance_scale: 50
+  image_guidance_scale: 5
+  use_inv_latent: True
+  num_inv_steps: 50
+
+learning_rate: 3e-5
+train_batch_size: 1
+max_train_steps: 1000
+validation_steps: 50
+trainable_modules:
+  - "attn1.to_q"
+  - "attn2.to_q"
+  - "attn_temp"
+
+seed: 33
+mixed_precision: fp16

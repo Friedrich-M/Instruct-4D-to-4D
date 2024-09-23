@@ -1,0 +1,4 @@
+Metadata-Version: 2.1
+Name: nerfplayer
+Version: 0.0.1
+Requires-Dist: nerfstudio==0.3.2

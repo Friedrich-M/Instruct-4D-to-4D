@@ -1,0 +1,5 @@
+[nerfstudio.method_configs]
+edit_nerfacto = nerfplayer.nerfplayer_config:edit_nerfacto
+in2n_nerfacto = nerfplayer.nerfplayer_config:in2n_nerfacto
+nerfplayer_nerfacto = nerfplayer.nerfplayer_config:nerfplayer_nerfacto
+nerfplayer_ngp = nerfplayer.nerfplayer_config:nerfplayer_ngp

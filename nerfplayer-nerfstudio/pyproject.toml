@@ -1,0 +1,17 @@
+[project]
+name = "nerfplayer"
+version = "0.0.1"
+
+dependencies=[
+    "nerfstudio==0.3.2",
+    "viser==0.1.3"
+]
+
+[tool.setuptools.packages.find]
+include = ["nerfplayer*"]
+
+[project.entry-points.'nerfstudio.method_configs']
+nerfplayer_nerfacto = 'nerfplayer.nerfplayer_config:nerfplayer_nerfacto'
+edit_nerfacto = 'nerfplayer.nerfplayer_config:edit_nerfacto'
+nerfplayer_ngp = 'nerfplayer.nerfplayer_config:nerfplayer_ngp'
+in2n_nerfacto = 'nerfplayer.nerfplayer_config:in2n_nerfacto'

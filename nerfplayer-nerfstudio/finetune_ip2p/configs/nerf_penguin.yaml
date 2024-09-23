@@ -1,0 +1,36 @@
+pretrained_model_path: "timbrooks/instruct-pix2pix"
+ddim_source: "CompVis/stable-diffusion-v1-4"
+output_dir: "./output/nerf_penguin"
+
+train_data:
+  data_path: "./data/penguin/frames_1"
+  prompt: "turn the penguin into a penguin"
+  width: 512c
+  height: 256
+  sample_start_idx: 0
+  n_sample_frames: 30
+
+
+validation_data:
+  prompts:
+    - "turn the penguin into a panda"
+  video_length: 30
+  width: 512
+  height: 256
+  num_inference_steps: 50
+  guidance_scale: 8.5
+  image_guidance_scale: 1.5
+  use_inv_latent: True
+  num_inv_steps: 50
+
+learning_rate: 3e-5
+train_batch_size: 1
+max_train_steps: 30000
+validation_steps: 30
+trainable_modules:
+  - "attn1.to_q"
+  - "attn2.to_q"
+  - "attn_temp"
+
+seed: 33
+mixed_precision: fp16

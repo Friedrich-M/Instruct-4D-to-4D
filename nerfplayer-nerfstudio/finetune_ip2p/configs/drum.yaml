@@ -1,0 +1,35 @@
+pretrained_model_path: "timbrooks/instruct-pix2pix"
+ddim_source: "CompVis/stable-diffusion-v1-4"
+output_dir: "./output/truck"
+
+train_data:
+  data_path: "data/truck/frames_1"
+  prompt: ""
+  n_sample_frames: 10
+  width: 512
+  height: 256
+  sample_start_idx: 50
+
+validation_data:
+  prompts:
+    - "What if it was made of diamonds?"
+  video_length: 10
+  width: 512
+  height: 256
+  num_inference_steps: 20
+  guidance_scale: 50
+  image_guidance_scale: 5
+  use_inv_latent: True
+  num_inv_steps: 20
+
+learning_rate: 3e-5
+train_batch_size: 1
+max_train_steps: 90
+validation_steps: 10
+trainable_modules:
+  - "attn1.to_q"
+  - "attn2.to_q"
+  - "attn_temp"
+
+seed: 33
+mixed_precision: fp16

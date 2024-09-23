@@ -11,6 +11,11 @@
 ![Pipeline](./imgs/pipeline.png)
 This is the official implementation of [Instruct 4D-to-4D](https://immortalco.github.io/Instruct-4D-to-4D/).
 
+## 🧷 News
+
+- **[2024-09-22]** The single-view setting codebase is released.   
+- **[2024-08-29]** The multi-view setting codebase is released.
+
 ## 🔧 Installation
 
 ### Environmental Setups
@@ -22,7 +27,12 @@ conda create -n instruct4d python=3.8
 conda activate instruct4d
 pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 --index-url https://download.pytorch.org/whl/cu118
 pip install -r requirements.txt
+# For single-view setting (NeRFStudio) also install the following packages; for more details, please refer to the [NeRFStudio](https://github.com/nerfstudio-project/nerfstudio) repository.
+pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+pip install -e nerfplayer-nerfstudio
 ```
+
+
 
 ### Data Preparation
 
@@ -35,10 +45,11 @@ wget https://github.com/facebookresearch/Neural_3D_Video/releases/download/v1.0/
 python tools/prepare_video.py data/neural_3d/coffee_martini
 ```
 
-**For single-view 4D scenes.** You can download scenes from [DyCheck Dataset](https://drive.google.com/drive/folders/1ZYQQh0qkvpoGXFIcK_j4suon1Wt6MXdZ).
-
+**For single-view 4D scenes.** You can download scenes from [DyCheck Dataset](https://drive.google.com/drive/folders/1cBw3CUKu2sWQfc_1LbFZGbpdQyTFzDEX).
 
 ## 🚀 Training
+
+### Multi-View Setting
 
 To edit a 4D scene, you must first train a regular 4D NeRF using your data. For example:
 ```bash
@@ -61,14 +72,43 @@ python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt \
     --diffusion_steps 20 --refine_num_steps 600 --refine_diffusion_steps 4 \
     --restview_refine_num_steps 700 --restview_refine_diffusion_steps 6
 ```
+
+### Single-View Setting
+
+We adopt the <a href='https://github.com/nerfstudio-project/nerfstudio'>NeRFStudio</a> version of <a href='https://github.com/lsongx/nerfplayer-nerfstudio'>NeRFPlayer</a> to train the single-view 4D NeRF. Please dive into the `nerfplayer-nerfstudio` directory and follow the instructions below to edit the single-view 4D NeRF. 
+
+Training the single-view 4D NeRF is similar to the multi-view setting. You can run the following command:
+```bash
+sh run_nerf.sh
+```
+
+We also provide some checkpoints of pre-trained 4D NeRF [here](https://drive.google.com/drive/folders/18yMsfZI2h45YO6Hx7bVWiA6XvXtU6_Dp?usp=drive_link). 
+
+To start training for editing the NeRF, run the following command:
+```bash
+sh run_edit.sh
+```
+
+To render the edited 4D scene, you can run the following command:
+```bash
+sh run_render.sh
+```
+
+To compare with the baseline Instruct NeRF2NeRF, you can run the following command:
+```bash
+sh run_in2n.sh
+```
+
+
 *4D Editing tips:*
 - Since we use the **Parallelization** scheme, please make sure you have at least 2 GPUs available. 
 - If you encounter the CUDA OOM issue, please try to reduce the sequence length of Anchor-Aware IP2P.
+- You can run the `nerfplayer-nerfstudio/instruct-pix2pix/edit_app.py` to edit the 2D image onlinely.
 
-> If you have any other questions, please feel free to open an issue.
+ If you have any other questions, please feel free to open an issue or e-mail at moulz@zju.edu.cn.
 
 ## 📜 TODO List
-- [ ] Release the codebase of single-view setting (within one week)
+- [x] Release the codebase of single-view setting (within one week)
 - [ ] Replace the NeRF backbone with 4D GS
 - [ ] Provide the pipeline of original version (key-view editing -> pseudo-view propagation)
 

@@ -1,0 +1,32 @@
+pretrained_model_path: "timbrooks/instruct-pix2pix"
+ddim_source: "CompVis/stable-diffusion-v1-4"
+output_dir: "./output/farm"
+
+train_data:
+  data_path: "data/farm"
+  prompt: ""
+  width: 576
+  height: 384
+
+validation_data:
+  prompts:
+    - "Make it look like it just snowed"
+  video_length: 10
+  width: 576
+  height: 384
+  num_inference_steps: 50
+  guidance_scale: 10.0
+  image_guidance_scale: 1.5
+  use_inv_latent: False
+  num_inv_steps: 50
+
+learning_rate: 3e-5
+train_batch_size: 1
+max_train_steps: 90
+validation_steps: 10
+trainable_modules:
+  - "attn1.to_q"
+  - "attn2.to_q"
+
+seed: 33
+mixed_precision: fp16
