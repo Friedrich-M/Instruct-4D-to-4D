@@ -4,12 +4,12 @@
 
 # Instruct 4D-to-4D: Editing 4D Scenes as Pseudo-3D Scenes Using 2D Diffusion
 
-[![Paper](https://img.shields.io/badge/arXiv-2406.09402-brightgreen)](https://arxiv.org/abs/2406.09402) [![Conference](https://img.shields.io/badge/CVPR-2024-blue)](https://openaccess.thecvf.com/content/CVPR2024/papers/Mou_Instruct_4D-to-4D_Editing_4D_Scenes_as_Pseudo-3D_Scenes_Using_2D_CVPR_2024_paper.pdf) [![Project WebPage](https://img.shields.io/badge/Project-webpage-%23fc4d5d)](https://immortalco.github.io/Instruct-4D-to-4D/)
+[![Paper](https://img.shields.io/badge/arXiv-2406.09402-brightgreen)](https://arxiv.org/abs/2406.09402) [![Conference](https://img.shields.io/badge/CVPR-2024-blue)](https://openaccess.thecvf.com/content/CVPR2024/papers/Mou_Instruct_4D-to-4D_Editing_4D_Scenes_as_Pseudo-3D_Scenes_Using_2D_CVPR_2024_paper.pdf) [![Project WebPage](https://img.shields.io/badge/Project-webpage-%23fc4d5d)](https://immortalco.github.io/Instruct-4D-to-4D/) [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 </div>
 
 ![Pipeline](./imgs/pipeline.png)
-> [Instruct 4D-to-4D: Editing 4D Scenes as Pseudo-3D Scenes Using 2D Diffusion](https://immortalco.github.io/Instruct-4D-to-4D/) \
+> [Instruct 4D-to-4D: Editing 4D Scenes as Pseudo-3D Scenes Using 2D Diffusion](https://arxiv.org/abs/2406.09402) \
 > Linzhan Mou, Jun-Kun Chen, Yu-Xiong Wang \
 > CVPR 2024
 
