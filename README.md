@@ -9,7 +9,9 @@
 </div>
 
 ![Pipeline](./imgs/pipeline.png)
-This is the official implementation of [Instruct 4D-to-4D](https://immortalco.github.io/Instruct-4D-to-4D/).
+> [Instruct 4D-to-4D: Editing 4D Scenes as Pseudo-3D Scenes Using 2D Diffusion](https://immortalco.github.io/Instruct-4D-to-4D/) \
+> Linzhan Mou, Jun-Kun Chen, Yu-Xiong Wang \
+> CVPR 2024
 
 ## 🧷 News
 
