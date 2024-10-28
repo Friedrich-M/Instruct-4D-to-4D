@@ -4,6 +4,7 @@ output_dir=log/dycheck
 
 max_num_iterations=20000
 prompt="What if it was painted by Edward Hopper?"
+# prompt="turn the cat into a fox"
 guidance_scale=7.5
 image_guidance_scale=1.5
 diffusion_steps=20

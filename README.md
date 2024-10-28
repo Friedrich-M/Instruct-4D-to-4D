@@ -75,6 +75,16 @@ python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt \
     --restview_refine_num_steps 700 --restview_refine_diffusion_steps 6
 ```
 
+To render the trained or edited results, please follow the instructions below:
+```bash
+python stream_train.py --render_only 1 \
+    --config configs/n3dv/train_coffee_50_2.txt \
+    --datadir data/neural_3d/coffee_martini \
+    --ckpt log/neural_3d/train_coffee_50_2/ckpt-99999.th \
+    --basedir log/neural_3d \
+    --render_test 1 --render_path 1 
+```
+
 ### Single-View Setting
 
 We adopt the <a href='https://github.com/nerfstudio-project/nerfstudio'>NeRFStudio</a> version of <a href='https://github.com/lsongx/nerfplayer-nerfstudio'>NeRFPlayer</a> to train the single-view 4D NeRF. Please dive into the `nerfplayer-nerfstudio` directory and follow the instructions below to edit the single-view 4D NeRF. 
