@@ -49,9 +49,6 @@ from nerfstudio.model_components.shaders import NormalsShader
 from nerfstudio.models.base_model import Model
 from nerfstudio.models.nerfacto import NerfactoModel, NerfactoModelConfig
 
-from nerfplayer.vgg_perceptual_loss import VGGPerceptualLoss
-from PIL import Image
-import torchvision
 
 @dataclass
 class NerfplayerNerfactoModelConfig(NerfactoModelConfig):
@@ -91,10 +88,6 @@ class NerfplayerNerfactoModelConfig(NerfactoModelConfig):
     """Patch size to use for LPIPS loss."""
     lpips_loss_mult: float = 1.0
     """Multiplier for LPIPS loss."""
-    use_vgg_perceptual: bool = False
-    """Whether to use VGG perceptual loss"""
-    vgg_perceptual_loss_mult: float = 0.1
-    """Multiplier for VGG perceptual loss."""
     height: int = 224
     width: int = 168
 
@@ -190,7 +183,6 @@ class NerfplayerNerfactoModel(NerfactoModel):
         self.psnr = PeakSignalNoiseRatio(data_range=1.0)
         self.ssim = structural_similarity_index_measure
         self.lpips = LearnedPerceptualImagePatchSimilarity()
-        self.vgg_perceptual = VGGPerceptualLoss(resize=True)
         self.temporal_distortion = True  # for viewer
 
     def get_outputs(self, ray_bundle: RayBundle):
@@ -252,11 +244,6 @@ class NerfplayerNerfactoModel(NerfactoModel):
             gt_patches = (image.view(-1, self.config.patch_size,self.config.patch_size, 3).permute(0, 3, 1, 2) * 2 - 1).clamp(-1, 1)
             loss_dict["lpips_loss"] = self.config.lpips_loss_mult * self.lpips(out_patches, gt_patches)
             
-        if self.config.use_vgg_perceptual and len(outputs["rgb"]) % (self.config.height*self.config.width) == 0:
-            out_rgb = outputs["rgb"].view(-1, self.config.height, self.config.width, 3).permute(0, 3, 1, 2)
-            gt_rgb = image.view(-1, self.config.height, self.config.width, 3).permute(0, 3, 1, 2)
-            loss_dict['vgg_perceptual_loss'] = self.config.vgg_perceptual_loss_mult * self.vgg_perceptual(out_rgb, gt_rgb)
-        
         if self.training:
             loss_dict["interlevel_loss"] = self.config.interlevel_loss_mult * interlevel_loss(
                 outputs["weights_list"], outputs["ray_samples_list"]

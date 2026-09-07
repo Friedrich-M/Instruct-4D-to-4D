@@ -48,7 +48,6 @@ edit_nerfacto = MethodSpecification(
             model=NerfplayerNerfactoModelConfig(
                 eval_num_rays_per_chunk=1 << 15,
                 use_lpips=True,
-                use_vgg_perceptual=False,
             ),
             ip2p_use_full_precision=False,
         ),
@@ -89,7 +88,6 @@ in2n_nerfacto = MethodSpecification(
             model=NerfplayerNerfactoModelConfig(
                 eval_num_rays_per_chunk=1 << 15,
                 use_lpips=True,
-                use_vgg_perceptual=False,
             ),
             ip2p_use_full_precision=True,
         ),

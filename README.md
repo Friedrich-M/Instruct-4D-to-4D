@@ -1,5 +1,3 @@
-  <!-- <a href=https://arxiv.org/abs/2406.09402><img src='https://img.shields.io/badge/arXiv-2402.00752-b31b1b.svg'></a> <a href='https://immortalco.github.io/Instruct-4D-to-4D/'><img src='https://img.shields.io/badge/Project-Page-Green'></a>  -->
-
 <div align="center">
 
 # Instruct 4D-to-4D: Editing 4D Scenes as Pseudo-3D Scenes Using 2D Diffusion
@@ -8,204 +6,269 @@
 
 </div>
 
-![Pipeline](./imgs/pipeline.png)
+![Pipeline](./assets/pipeline.png)
+
 > [Instruct 4D-to-4D: Editing 4D Scenes as Pseudo-3D Scenes Using 2D Diffusion](https://arxiv.org/abs/2406.09402) \
 > Linzhan Mou, Jun-Kun Chen, Yu-Xiong Wang \
 > CVPR 2024
 
+<details>
+<summary><b>How it works</b></summary>
+
+Editing a 4D scene with a text instruction is hard because a 2D image editor has no memory: run it on each frame and each frame comes back with its own interpretation of the prompt, and the radiance field averages the disagreement into blur. This work treats the 4D scene as a *pseudo-3D* scene and enforces consistency in three places:
+
+1. **Anchor-aware InstructPix2Pix** edits a whole batch of frames in one diffusion pass, with every frame attending to a shared anchor, so they come back with one appearance rather than several.
+2. **Flow-guided sliding window** carries that edit along time. Each window is initialised by warping the previous frame forward with optical flow, and only the regions the flow cannot explain are repainted.
+3. **Depth-based warping** carries the edit across viewpoints, reprojecting an edited view into its neighbours through the depth the field renders.
+
+</details>
+
 ## 🧷 News
 
-- **[2024-09-22]** The single-view setting codebase is released.   
+- **[2024-09-22]** The single-view setting codebase is released.
 - **[2024-08-29]** The multi-view setting codebase is released.
+
+## 📁 Repository layout
+
+```
+instruct4d/            the library
+├── ip2p/              anchor-aware InstructPix2Pix (component 1)
+├── editing/           temporal propagation and depth warping (components 2, 3)
+├── flow/              vendored RAFT plus flow warping helpers
+├── fields/            streaming TensoRF 4D scene representation
+├── data/              DyNeRF loader and camera-ray construction
+├── rendering/         volumetric rendering and evaluation
+├── training/          ray samplers and the optimisation step
+└── config.py          the shared option set
+
+train.py               reconstruct a 4D NeRF          (multi-view)
+edit.py                edit it with an instruction    (multi-view)
+render.py              render from a checkpoint       (multi-view)
+configs/n3dv/          per-scene settings
+scripts/               ready-to-run wrappers for the three entry points
+demos/                 one runnable demo per framework component
+tools/                 dataset preparation
+tests/                 CPU unit tests, no data or weights needed
+assets/                figures used by this README
+nerfplayer-nerfstudio/ the single-view setting, on a NeRFPlayer backbone
+```
 
 ## 🔧 Installation
 
-### Environmental Setups
+The two settings need **separate environments**. NeRFStudio 0.3.2 hard-pins `diffusers==0.16.1`, while the anchor-aware UNet needs `diffusers>=0.17`, so one environment cannot satisfy both. They share the `instruct4d` library, which is installed into each.
 
 ```bash
 git clone https://github.com/Friedrich-M/Instruct-4D-to-4D.git
 cd Instruct-4D-to-4D
-conda create -n instruct4d python=3.8
-conda activate instruct4d
-pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 --index-url https://download.pytorch.org/whl/cu118
-pip install -r requirements.txt
-# For single-view setting (NeRFStudio) also install the following packages; for more details, please refer to the [NeRFStudio](https://github.com/nerfstudio-project/nerfstudio) repository.
-pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
-pip install -e nerfplayer-nerfstudio
 ```
 
+### Multi-view setting
 
+```bash
+conda create -n instruct4d python=3.8 && conda activate instruct4d
 
-### Data Preparation
+# Match the CUDA build to your driver.
+pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 \
+    --index-url https://download.pytorch.org/whl/cu118
 
-**For multi-view 4D scenes.** You can download scenes from [DyNeRF Dataset](https://github.com/facebookresearch/Neural_3D_Video/releases/tag/v1.0).
+pip install -r requirements.txt
+pip install -e .
+```
+
+`diffusers`, `transformers` and `accelerate` are pinned together: the anchor-aware UNet is built against the diffusers 0.19 model API, which later releases changed.
+
+### Single-view setting
+
+Install NeRFStudio and the NeRFPlayer backbone, then restore the diffusers version the anchor-aware UNet needs. NeRFStudio only uses its older diffusers in `nerfstudio.generative` (the Generfacto text-to-3D method), which this repository never touches, so the override is safe. See the [NeRFStudio](https://github.com/nerfstudio-project/nerfstudio) repository for the full backbone instructions.
+
+```bash
+conda create -n instruct4d-sv python=3.8 && conda activate instruct4d-sv
+
+pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+pip install -e nerfplayer-nerfstudio   # pulls nerfstudio 0.3.2
+pip install -e .                       # the shared instruct4d library
+
+# nerfstudio downgrades these; the anchor-aware UNet needs them back.
+pip install --no-deps --upgrade diffusers==0.19.0 transformers==4.31.0 accelerate==0.21.0
+```
+
+### RAFT weights
+
+Both settings need the RAFT `raft-things` checkpoint, which is not shipped:
+
+```bash
+mkdir -p weights
+# From the RAFT release: https://github.com/princeton-vl/RAFT
+gdown 1MqDajR89k-xLV0HIrmJ0k-n8ZpG6_suM -O weights/raft-things.pth
+```
+
+## 📦 Data
+
+**Multi-view 4D scenes** come from the [DyNeRF dataset](https://github.com/facebookresearch/Neural_3D_Video/releases/tag/v1.0).
+
 ```bash
 mkdir -p data/neural_3d && cd data/neural_3d
-# take coffee_martini as an example
-wget https://github.com/facebookresearch/Neural_3D_Video/releases/download/v1.0/coffee_martini.zip && unzip coffee_martini.zip && cd ../..
-# run the following command to generate the images
+wget https://github.com/facebookresearch/Neural_3D_Video/releases/download/v1.0/coffee_martini.zip
+unzip coffee_martini.zip && cd ../..
+
+# Explode the videos into frames/<camera>/<index>.jpg
 python tools/prepare_video.py data/neural_3d/coffee_martini
 ```
 
-**For single-view 4D scenes.** You can download scenes from [DyCheck Dataset](https://drive.google.com/drive/folders/1cBw3CUKu2sWQfc_1LbFZGbpdQyTFzDEX).
+**Single-view 4D scenes** come from the [DyCheck dataset](https://drive.google.com/drive/folders/1cBw3CUKu2sWQfc_1LbFZGbpdQyTFzDEX).
 
-## 🚀 Training
+The config files assume `./data`, `./log` and `./cache` inside the repository. Override them with `--datadir`, `--basedir` and `--cache` if your data lives elsewhere.
 
-### Multi-View Setting
+## 🚀 Multi-view setting
 
-To edit a 4D scene, you must first train a regular 4D NeRF using your data. For example:
+### 1. Reconstruct
+
+Editing starts from a field that already reproduces the scene, so train one first:
+
 ```bash
-python stream_train.py --config configs/n3dv/train_coffee_50_2.txt \
-    --datadir ./data/neural_3d/coffee_martini \
-    --basedir ./log/neural_3d \
-    --render_test 1 --render_path 1  
+python train.py --config configs/n3dv/train_coffee_50_2.txt \
+    --render_test 1 --render_path 1
 ```
 
-Once you have fully trained your scene, the checkpoints will be saved to the `log` directory. We also provide some checkpoints of pre-trained 4D NeRF [here](https://drive.google.com/drive/folders/1ftH5OavgcHS_NTbc1dlDknhZKLhzOdXy?usp=sharing). You can download and put them into the `log` directory. The filename should be like `train_{scene_name}_{num_frames}_{downsample_factor}`.
+Checkpoints land in `log/neural_3d/<expname>/`, alongside the resolved config that `edit.py` and `render.py` read back. Pre-trained checkpoints are available [here](https://drive.google.com/drive/folders/1ftH5OavgcHS_NTbc1dlDknhZKLhzOdXy?usp=sharing); put them under `log/` with a directory named `train_<scene>_<frames>_<downsample>`.
 
-To start training for editing the NeRF, run the following command:
+### 2. Edit
+
 ```bash
-python stream_edit.py --config configs/n3dv/edit_coffee_50_2.txt \
-    --datadir data/neural_3d/coffee_martini \
-    --basedir log/neural_3d --expname edit_coffee_50_2 \
+python edit.py --config configs/n3dv/edit_coffee_50_2.txt \
     --ckpt log/neural_3d/train_coffee_50_2/ckpt-99999.th \
     --prompt 'What if it was painted by Van Gogh?' \
     --guidance_scale 9.5 --image_guidance_scale 1.5 \
-    --diffusion_steps 20 --refine_num_steps 600 --refine_diffusion_steps 4 \
-    --restview_refine_num_steps 700 --restview_refine_diffusion_steps 6
+    --diffusion_steps 20 \
+    --refine_diffusion_steps 4 --refine_num_steps 600 \
+    --restview_refine_diffusion_steps 6 --restview_refine_num_steps 700 \
+    --ip2p_device cuda:1
 ```
 
-To render the trained or edited results, please follow the instructions below:
+The field is re-optimised on the main GPU while the diffusion model edits frames on `--ip2p_device`, so **two GPUs are expected**. Pass `--save_debug_images` to write the intermediate renders, warps and edits under the log directory.
+
+### 3. Render
+
 ```bash
-python stream_train.py --render_only 1 \
-    --config configs/n3dv/train_coffee_50_2.txt \
-    --datadir data/neural_3d/coffee_martini \
-    --ckpt log/neural_3d/train_coffee_50_2/ckpt-99999.th \
-    --basedir log/neural_3d \
-    --render_test 1 --render_path 1 
+python render.py --config configs/n3dv/train_coffee_50_2.txt \
+    --ckpt log/neural_3d/edit_coffee_50_2/ckpt-14999.th \
+    --render_test 1 --render_path 1
 ```
 
-### Single-View Setting
+`scripts/train.sh`, `scripts/edit.sh` and `scripts/render.sh` wrap these three commands with the defaults above.
 
-We adopt the <a href='https://github.com/nerfstudio-project/nerfstudio'>NeRFStudio</a> version of <a href='https://github.com/lsongx/nerfplayer-nerfstudio'>NeRFPlayer</a> to train the single-view 4D NeRF. Please dive into the `nerfplayer-nerfstudio` directory and follow the instructions below to edit the single-view 4D NeRF. 
+## 🚀 Single-view setting
 
-Training the single-view 4D NeRF is similar to the multi-view setting. You can run the following command:
+The single-view setting uses the [NeRFStudio](https://github.com/nerfstudio-project/nerfstudio) version of [NeRFPlayer](https://github.com/lsongx/nerfplayer-nerfstudio) as the backbone. There are no other cameras to be consistent with, so only the temporal half of the method applies. Work inside `nerfplayer-nerfstudio/`:
+
 ```bash
-sh run_nerf.sh
+cd nerfplayer-nerfstudio
+
+sh scripts/train.sh                       # reconstruct
+LOAD_DIR=<path>/nerfstudio_models sh scripts/edit.sh     # edit
+LOAD_DIR=<path>/nerfstudio_models sh scripts/render.sh   # render a video
+LOAD_DIR=<path>/nerfstudio_models sh scripts/in2n.sh     # Instruct-NeRF2NeRF baseline
 ```
 
-We also provide some checkpoints of pre-trained 4D NeRF [here](https://drive.google.com/drive/folders/18yMsfZI2h45YO6Hx7bVWiA6XvXtU6_Dp?usp=drive_link). 
+`LOAD_DIR` is the `nerfstudio_models` directory of the run you want to start from; each run gets a timestamped directory, so there is no default that will work for you. Pre-trained checkpoints are available [here](https://drive.google.com/drive/folders/18yMsfZI2h45YO6Hx7bVWiA6XvXtU6_Dp?usp=drive_link).
 
-To start training for editing the NeRF, run the following command:
+## 🔥 Framework components
+
+Each of the three components has a standalone demo, so you can see what it does on its own before running a full edit. They read an example bundle of a few frames plus the point cloud a trained field produced:
+
 ```bash
-sh run_edit.sh
+gdown 1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK && unzip examples.zip
 ```
 
-To render the edited 4D scene, you can run the following command:
-```bash
-sh run_render.sh
+```
+examples/
+├── coffee_frame_2x/   frames 0..N of one camera, for the temporal demos
+├── coffee_cam_2x/     one timestamp seen from several cameras, for the spatial demo
+├── pts_0.pt           per-view world points, rendered from a trained field
+└── warp_0.pt          per-view-pair pixel maps derived from those points
 ```
 
-To compare with the baseline Instruct NeRF2NeRF, you can run the following command:
-```bash
-sh run_in2n.sh
-```
+All demos write to `./demo_output` unless you pass `--output_dir`.
 
+### (1) Anchor-aware InstructPix2Pix
 
-*4D Editing tips:*
-- Since we use the **Parallelization** scheme, please make sure you have at least 2 GPUs available. 
-- If you encounter the CUDA OOM issue, please try to reduce the sequence length of Anchor-Aware IP2P.
-- You can run the `nerfplayer-nerfstudio/instruct-pix2pix/edit_app.py` to edit the 2D image onlinely.
-
- If you have any other questions, please feel free to open an issue or e-mail at moulz@zju.edu.cn.
-
-## 📜 TODO List
-- [x] Release the codebase of single-view setting (within one week)
-- [ ] Replace the NeRF backbone with 4D GS
-- [ ] Provide the pipeline of original version (key-view editing -> pseudo-view propagation)
-
-
-## 🔥 Framework
-> We provide some demos below for better understanding our framework components.
-
-Please dive into the `ip2p_models` directory and download the example files from [Google Drive](https://drive.google.com/file/d/1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK/view?usp=drive_link).
+The point of this component is that editing frames *together* gives them one appearance, where editing them *separately* gives each its own. Run both on the same frames and put the two contact sheets side by side:
 
 ```bash
-gdown 1aNwZ4prQk6z1DJtIg9ssNroTbBK6YLnK
-```
-
-### (1) Anchor-Aware Instruct-Pix2Pix (IP2P)
-
-To enable InsturctPix2Pix simultaneously edit multiple frames and achieve **within-batch consistency**, we modify the attention and convolution structure of original IP2P.
-```bash
-# Single IP2P
-python test_ip2p.py --image_path ./examples/coffee_frame_2x/0.png \
+# Each frame edited on its own: every one interprets the prompt differently
+python demos/single_view_ip2p.py --image_dir examples/coffee_frame_2x/ \
     --prompt 'What if it was painted by Van Gogh?' \
-    --resize 1024 --steps 20 \
+    --sequence_length 6 --resize 1024 --steps 20 \
     --guidance_scale 10.5 --image_guidance_scale 1.5
-# Anchor-Aware IP2P
-python test_ip2p_sequence.py --image_dir ./examples/coffee_frame_2x/ \
+
+# The same frames edited as one batch, all attending to a shared anchor
+python demos/anchor_aware_ip2p.py --image_dir examples/coffee_frame_2x/ \
     --prompt 'What if it was painted by Van Gogh?' \
     --sequence_length 6 --resize 1024 --steps 20 \
     --guidance_scale 10.5 --image_guidance_scale 1.5
 ```
 
-### (2) Key Pseudo-View Editing (Temporal Consistency)
+`single_view_ip2p.py` also takes `--image_path` for a single image, which is the quickest way to check whether a prompt works at all before spending time on a 4D run.
 
-Along the temporal dimension, to achieve **cross-batch consistency** in long-term sequence editing, we propose flow-guided sliding window warping, with anchor-aware IP2P painting.
+### (2) Key pseudo-view editing (temporal consistency)
 
-![Flow-guided Sliding Window](./imgs/sliding_window.png)
+![Flow-guided sliding window](./assets/sliding_window.png)
 
 ```bash
-# Flow-Guided Warping
-python test_flow.py \
-    --source_img ./examples/coffee_frame_2x/3.png \
-    --target_img ./examples/coffee_frame_2x/6.png
-# Sliding Window Warping w/ Anchor-Aware IP2P Painting
-python test_flow_sequence.py \
-    --image_dir ./examples/coffee_frame_2x/ \
+# Flow between two frames, the consistency mask it yields, and the warp it
+# supports. Writes the source, the target and each intermediate step.
+python demos/flow_warp.py \
+    --source_img examples/coffee_frame_2x/3.png \
+    --target_img examples/coffee_frame_2x/6.png \
+    --prompt 'What if it was painted by Van Gogh?'
+
+# The full sliding window: edit the first window, then warp forward and repaint
+# only what the flow could not explain. One image per window per stage.
+python demos/sliding_window.py --image_dir examples/coffee_frame_2x/ \
     --prompt 'What if it was painted by Van Gogh?' \
     --sequence_length 6 --resize 1024 \
     --guidance_scale 10.5 --image_guidance_scale 1.5 \
     --painting_diffusion_steps 5 --painting_num_train_timesteps 600
 ```
 
-### (3) Pseudo-View Propagation (Spatial Consistency)
+### (3) Pseudo-view propagation (spatial consistency)
 
-According to the principal of Perspective Transformation, we could use rendered depth from 4D NeRF with the camera parameters to warp the edited pseudo-view to the target view, while maintaining **spatial consistency**.
+Rendered depth plus the camera parameters give an exact perspective transform between two views, so an edit made in one view can be carried into another. Where the two views disagree about what surface a pixel sees, the correspondence is rejected and left black.
 
-![Depth-based Warping](./imgs/warp.png)
+![Depth-based warping](./assets/warp.png)
 
 ```bash
-# Depth-Based Warping
-python test_depth.py \
-    --source_img ./examples/coffee_cam_2x/0.png \
-    --target_img ./examples/coffee_cam_2x/1.png \
+python demos/depth_warp.py \
+    --source_img examples/coffee_cam_2x/0.png \
+    --target_img examples/coffee_cam_2x/1.png \
     --prompt 'What if it was painted by Van Gogh?' \
-    --guidance_scale 10.5 --image_guidance_scale 1.5 \
-    --pts_path ./examples/pts_0.pt --warp_path ./examples/warp_0.pt
+    --pts_path examples/pts_0.pt --warp_path examples/warp_0.pt
 ```
+
+The result is a 2x2 sheet: the two original views on top, the edited source and its warp into the target below.
 
 ## 📂 Notes
 
-[1] **2D Editing Quality.** If your edit isn't working as you desire, it is likely because InstructPix2Pix struggles with your images and prompt. We recommend taking one of your images and trying to edit it in 2D first with InstructPix2Pix, referring to the tips on getting a good edit can be found [here](https://github.com/timothybrooks/instruct-pix2pix#tips).
-```bash
-python test_ip2p.py --image_path $IMAGE_PATH --prompt $PROMPT
-```
+**2D editing quality.** If an edit is not coming out as you want, the cause is usually InstructPix2Pix rather than the 4D machinery. Try the prompt on a single frame first with `demos/single_view_ip2p.py`; the [InstructPix2Pix tips](https://github.com/timothybrooks/instruct-pix2pix#tips) apply directly.
 
-[2] **4D Scene Representation.** Our framework is general, and therefore, any 4D scene representation adopting RGB observations as supervision can be used. We encourage to extend our editing pipeline to **4D Gaussian Splatting** to make the editing more efficient.
+**Out of memory.** Reduce `--sequence_length`, which sets how many frames the diffusion model holds at once.
+
+**4D scene representation.** The method only needs a representation supervised by RGB observations, so it is not tied to the streaming TensoRF used here. Extending it to 4D Gaussian Splatting would make editing considerably faster.
 
 ## Acknowledgement
 
-We would like to thank [Liangchen Song](https://lsongx.github.io/index.html) for providing the codebase of [NeRFPlayer](https://lsongx.github.io/projects/nerfplayer.html) and helpful discussion. We also sincerely thank [Haque, Ayaan](https://www.ayaanzhaque.me/) for kind discussion about 3D scene editing.
+We would like to thank [Liangchen Song](https://lsongx.github.io/index.html) for providing the codebase of [NeRFPlayer](https://lsongx.github.io/projects/nerfplayer.html) and helpful discussion. We also sincerely thank [Haque, Ayaan](https://www.ayaanzhaque.me/) for kind discussion about 3D scene editing. This repository vendors [RAFT](https://github.com/princeton-vl/RAFT) for optical flow and builds on [TensoRF](https://github.com/apchenstu/TensoRF) and [InstructPix2Pix](https://github.com/timothybrooks/instruct-pix2pix).
+
+If you have any questions, please open an issue or e-mail moulz1031@gmail.com.
 
 ## 📝 Citation
 
-You can find our paper on [arXiv](https://arxiv.org/abs/2406.09402).
+If you find this code or the paper useful for your research, please consider citing:
 
-If you find this code or find the paper useful for your research, please consider citing:
-
-```
+```bibtex
 @inproceedings{mou2024instruct,
   title={Instruct 4D-to-4D: Editing 4D Scenes as Pseudo-3D Scenes Using 2D Diffusion},
   author={Mou, Linzhan and Chen, Jun-Kun and Wang, Yu-Xiong},

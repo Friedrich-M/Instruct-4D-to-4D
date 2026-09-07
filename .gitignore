@@ -1,0 +1,52 @@
+# Byte-compiled files and caches
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Packaging
+/build/
+/dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+/.venv/
+/venv/
+
+# Leading slashes matter below: these are generic words, and an unanchored
+# rule would also match source directories such as instruct4d/data/.
+
+# Datasets. See the README for how to download and prepare them.
+/data/
+
+# Pretrained weights, all re-downloadable: RAFT under weights/, and the
+# checkpoints train.py and edit.py write (.th) or nerfstudio writes (.ckpt).
+/weights/
+*.pth
+*.th
+*.ckpt
+
+# The example bundle for demos/, downloaded with gdown.
+/examples/
+/examples.zip
+
+# Run outputs. log/ and cache/ are the defaults in configs/n3dv/*.txt,
+# outputs/ is nerfstudio's, demo_output/ is where demos/ write.
+/log/
+/logs/
+/cache/
+/outputs/
+/demo_output/
+/wandb/
+events.out.tfevents.*
+
+# Exported meshes
+*.ply
+
+# Editor and OS cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp

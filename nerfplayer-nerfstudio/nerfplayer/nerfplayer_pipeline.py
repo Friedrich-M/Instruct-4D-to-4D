@@ -12,69 +12,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""InstructPix2Pix Pipeline and trainer"""
+"""Instruct 4D-to-4D editing for a single-view (monocular) 4D scene.
+
+The single-view setting has no other cameras to be consistent with, so the
+spatial half of the method does not apply: what remains is the temporal half.
+The key frame is edited once, and that edit is carried along the sequence by a
+flow-guided sliding window, exactly as in the multi-view pipeline.
+
+The whole edit runs on a background thread started by
+:class:`~nerfplayer.nerfplayer_trainer.NerfplayerTrainer`, so the field keeps
+absorbing edited frames as they are produced.
+"""
 
 from dataclasses import dataclass, field
-from itertools import cycle
-import math
-from typing import Optional, Type, Any, Mapping
-from einops import rearrange
-import torchvision
+from typing import List, Optional, Type
+
+import numpy as np
 import torch
-import torch.nn.functional as F
+import torchvision
+from einops import rearrange
 from torch.cuda.amp.grad_scaler import GradScaler
 from typing_extensions import Literal
-from nerfstudio.pipelines.base_pipeline import VanillaPipeline, VanillaPipelineConfig
-from nerfstudio.viewer.server.viewer_elements import ViewerNumber, ViewerText
 
-import threading
-import numpy as np
-import cv2
-import argparse
-import random
+from instruct4d.flow import (
+    blend_with_mask,
+    consistency_mask,
+    estimate_flow_pair,
+    load_raft,
+    warp_by_flow,
+)
+from instruct4d.ip2p import SequenceInstructPix2Pix
 
-from nerfplayer.nerfplayer_datamanager import NerfplayerDataManagerConfig
-from nerfplayer.ip2p_sequence import SequenceInstructPix2Pix 
+from nerfplayer.editing_pipeline import EditingPipeline, EditingPipelineConfig
 
-from finetune_ip2p.RAFT.raft import RAFT
-from finetune_ip2p.RAFT.utils.utils import InputPadder
-
-import warnings; warnings.filterwarnings("ignore")
 
 @dataclass
-class NerfplayerPipelineConfig(VanillaPipelineConfig):
-    """Configuration for pipeline instantiation"""
+class NerfplayerPipelineConfig(EditingPipelineConfig):
+    """Configuration for :class:`NerfplayerPipeline`."""
 
     _target: Type = field(default_factory=lambda: NerfplayerPipeline)
-    """target class to instantiate"""
-    datamanager: NerfplayerDataManagerConfig = NerfplayerDataManagerConfig()
-    """specifies the datamanager config"""
-    prompt: str = "Original"
-    """prompt for InstructPix2Pix"""
-    guidance_scale: float = 7.5
-    """(text) guidance scale for InstructPix2Pix"""
-    image_guidance_scale: float = 1.5
-    """image guidance scale for InstructPix2Pix"""
-    diffusion_steps: int = 20
-    """Number of diffusion steps to take for InstructPix2Pix"""
-    refine_diffusion_steps: int = 3
-    """Number of diffusion steps to take for refinement"""
-    refine_num_steps: int = 600
-    """Number of denoise steps to take for refinement"""
-    ip2p_device: Optional[str] = None
-    """Second device to place InstructPix2Pix on. If None, will use the same device as the pipeline"""
-    ip2p_use_full_precision: bool = False
-    """Whether to use full precision for InstructPix2Pix"""
+    """Class this config instantiates."""
+    refine_diffusion_steps: int = 5
+    """Denoising steps when repainting a flow-warped window."""
+    refine_num_steps: int = 700
+    """Noise level when repainting; lower preserves more of the warp."""
+    sequence_length: int = 5
+    """Frames edited together in one anchor-aware batch. Reduce this first if
+    you run out of GPU memory."""
+    overlap_length: int = 1
+    """Frames shared between consecutive windows. The overlapping frame is the
+    anchor slot, so this is normally 1."""
     resize_512: bool = False
-    """whether to resize the images to 512x512"""
-    small: bool = False
-    """whether to use the small model for RAFT"""
-    mixed_precision: bool = False
-    """whether to use mixed precision for RAFT"""
-    model_path: str = "finetune_ip2p/weights/raft-things.pth"
-    
-class NerfplayerPipeline(VanillaPipeline):
-    """InstructNeRF2NeRF pipeline"""
+    """Edit at roughly 512px on the long side instead of the native resolution."""
+    raft_ckpt: str = "weights/raft-things.pth"
+    """RAFT optical-flow checkpoint."""
+    save_debug_images: bool = False
+    """Write the intermediate renders, warps and edits to the working directory."""
+
+
+class NerfplayerPipeline(EditingPipeline):
+    """Edits a monocular 4D scene with a flow-guided sliding window."""
 
     config: NerfplayerPipelineConfig
 
@@ -87,337 +84,186 @@ class NerfplayerPipeline(VanillaPipeline):
         local_rank: int = 0,
         grad_scaler: Optional[GradScaler] = None,
     ):
-        super().__init__(config, device, test_mode, world_size, local_rank)
+        super().__init__(config, device, test_mode, world_size, local_rank, grad_scaler)
 
-        # select device for InstructPix2Pix
-        self.ip2p_device = (
-            torch.device(device)
-            if self.config.ip2p_device is None
-            else torch.device(self.config.ip2p_device)
+        self.ip2p = SequenceInstructPix2Pix(
+            device=self.ip2p_device,
+            use_full_precision=self.config.ip2p_use_full_precision,
+            # Consecutive frames of a monocular capture differ more than
+            # neighbouring views of one timestamp, so each frame keeps its own
+            # content alongside the anchor's.
+            self_attention="anchor_self",
+        )
+        self.raft = load_raft(self.config.raft_ckpt, self.ip2p_device)
+        self.num_frames = len(self.datamanager.train_dataparser_outputs.image_filenames)
+
+    # ------------------------------------------------------------------
+    def test_edit(self, key_frame: int = 0) -> None:
+        """Edit the key frame, then propagate it along the sequence.
+
+        Runs a single pass: the key frame is edited once and every window is
+        written back once.  Editing is far slower than an optimisation step, so
+        the field continues training against the frames already produced.
+        """
+        anchor, anchor_cond = self._edit_key_frame(key_frame)
+
+        stride = self.config.sequence_length - self.config.overlap_length
+        for start in range(0, self.num_frames, stride):
+            end = min(start + self.config.sequence_length, self.num_frames)
+            if end <= start:
+                break
+            self._edit_window(
+                list(range(start, end)), anchor, anchor_cond, key_frame,
+                is_last=end >= self.num_frames,
+            )
+
+        print("editing complete; training continues on the edited frames")
+
+    # ------------------------------------------------------------------
+    def _edit_key_frame(self, key_frame: int):
+        """Edit the key frame and write it back; return it and its condition.
+
+        The result becomes the anchor for every window, which is what stops the
+        appearance drifting as the edit travels along the sequence.
+        """
+        slot = self.batch_slot(key_frame)
+        render = rearrange(self.render_view(key_frame), "h w c -> 1 c h w")
+        condition = rearrange(
+            self.datamanager.original_image_batch["image"][slot], "h w c -> 1 c h w"
         )
 
-        self.ip2p = SequenceInstructPix2Pix(device=self.ip2p_device, ip2p_use_full_precision=self.config.ip2p_use_full_precision)
-        
-        raft = torch.nn.DataParallel(RAFT(args=argparse.Namespace(small=self.config.small, mixed_precision=self.config.mixed_precision)))
-        raft.load_state_dict(torch.load(self.config.model_path))
-        raft = raft.module
-        self.raft = raft
-        
-        self.raft.to(self.ip2p_device)
-        self.raft.requires_grad_(False)
-        self.raft.eval()
-        
-        # keep track of spot in dataset
-        self.sequence_length = 5 # jointly edit X images
-        self.overlap_length = 1 # overlap X images for inference
-        
-        self.train_dataset_length = len(self.datamanager.train_dataparser_outputs.image_filenames)
-        self.train_indices_order = cycle(range(self.train_dataset_length))
-        
-        self.buffer_value = 0.9 # buffer value for dataset update
-        
-        # lock for data and model, since we are using multiple threads
-        self.data_lock = threading.Lock() 
-        self.model_lock = threading.Lock()
-        
-        # keep track of current step
-        self.current_step = 0
-        self.start_step = 0 
-        self.end_step = 0
-        
-        # viewer elements
-        self.prompt_box = ViewerText(name="Prompt", default_value=self.config.prompt, cb_hook=self.prompt_callback)
-        self.guidance_scale_box = ViewerNumber(name="Text Guidance Scale", default_value=self.config.guidance_scale, cb_hook=self.guidance_scale_callback)
-        self.image_guidance_scale_box = ViewerNumber(name="Image Guidance Scale", default_value=self.config.image_guidance_scale, cb_hook=self.image_guidance_scale_callback)
+        target = self._edit_resolution(render)
+        render = self.resize(render, target)
+        condition = self.resize(condition, target)
+        self._save_debug("key_frame_render", render)
 
+        edited = self.ip2p.edit_sequence(
+            images=render.to(self.ip2p_device),
+            images_cond=condition.to(self.ip2p_device),
+            prompt=self.config.prompt,
+            guidance_scale=self.config.guidance_scale,
+            image_guidance_scale=self.config.image_guidance_scale,
+            diffusion_steps=self.config.diffusion_steps,
+            noisy_latent_type="noisy_latent",
+        ).to(render)
+        self._save_debug("key_frame_edited", edited)
 
-    def guidance_scale_callback(self, handle: ViewerText) -> None:
-        """Callback for guidance scale slider"""
-        self.config.guidance_scale = handle.value
-
-    def image_guidance_scale_callback(self, handle: ViewerText) -> None:
-        """Callback for text guidance scale slider"""
-        self.config.image_guidance_scale = handle.value
-
-    def prompt_callback(self, handle: ViewerText) -> None:
-        """Callback for prompt box, change prompt in config and update text embedding"""
-        self.config.prompt = handle.value
-            
-    def test_edit(self, key_frame:int=0):
-        update_batch_index = 0
-        
-        while (self.current_step - self.start_step) < self.buffer_value * (self.end_step - self.start_step):    
-            self.frame_batch_index = 0
-            tag = self.config.prompt.split(" ")[-1].replace(" ", "").replace(",", "").replace(".", "").replace("?", "").replace("!", "")
-            
-            key_frame_spot = int(torch.where(self.datamanager.image_batch["image_idx"] == torch.tensor(key_frame))[0][0])
-            key_frame_camera_transforms = self.datamanager.train_camera_optimizer(torch.tensor(key_frame).unsqueeze(dim=0))
-            key_frame_camera = self.datamanager.train_dataparser_outputs.cameras[key_frame].to(self.device)
-            
-            key_frame_condition_image = self.datamanager.original_image_batch["image"][key_frame_spot]
-            
-            key_frame_ray_bundle = key_frame_camera.generate_rays(torch.tensor(list(range(1))).unsqueeze(-1), camera_opt_to_camera=key_frame_camera_transforms)
-            camera_outputs = self.model.get_outputs_for_camera_ray_bundle(key_frame_ray_bundle)
-            
-            key_frame_render_image = camera_outputs["rgb"] # (H, W, 3)
-            key_frame_render_image = rearrange(key_frame_render_image, 'H W C -> 1 C H W') # (N, C, H, W)
-            key_frame_condition_image = rearrange(key_frame_condition_image, 'H W C -> 1 C H W') # (N, C, H, W)
-            
-            if self.config.resize_512:
-                height, width = key_frame_render_image.size()[-2:]
-                factor = 512 / max(height, width)
-                factor = math.ceil(min(height, width) * factor / 64) * 64 / min(height, width)
-                height = int((height * factor) // 64) * 64
-                width = int((width * factor) // 64) * 64
-                key_frame_render_image = F.interpolate(key_frame_render_image, size=(height, width), mode="bilinear", align_corners=False) # (N, C, RH, RW)
-                key_frame_condition_image = F.interpolate(key_frame_condition_image, size=(height, width), mode="bilinear", align_corners=False) # (N, C, RH, RW)
-                
-            torchvision.utils.save_image(key_frame_render_image, f'key_frame_render_image_{tag}.png', nrow=key_frame_render_image.shape[0], padding=0)
-            torchvision.utils.save_image(key_frame_condition_image, f'key_frame_condition_image_{tag}.png', nrow=key_frame_condition_image.shape[0], padding=0)
-            
-            key_frame_edit_image = self.ip2p.edit_sequence(
-                images=key_frame_render_image.to(self.ip2p_device), 
-                images_cond=key_frame_condition_image.to(self.ip2p_device),
-                guidance_scale=self.config.guidance_scale,
-                image_guidance_scale=self.config.image_guidance_scale,
-                diffusion_steps=20,
-                prompt=self.config.prompt,
-                noisy_latent_type="noisy_latent",
-                T=1000 if update_batch_index == 0 else 800,
-            ).to(key_frame_render_image) # (1, C, H, W)
-            
-            torchvision.utils.save_image(key_frame_edit_image, f'key_frame_edit_image_{tag}.png', nrow=key_frame_edit_image.shape[0], padding=0)
-            
-            if key_frame_edit_image.size()[-2:] != self.datamanager.image_batch["image"].size()[1:-1]:
-                key_frame_edit_image = F.interpolate(key_frame_edit_image, size=self.datamanager.image_batch["image"].size()[1:-1], mode="bilinear", align_corners=False)
-                key_frame_condition_image = F.interpolate(key_frame_condition_image, size=self.datamanager.image_batch["image"].size()[1:-1], mode="bilinear", align_corners=False)
-            
-            with self.data_lock:
-                self.datamanager.image_batch["image"][key_frame_spot] = key_frame_edit_image[0].squeeze().permute(1, 2, 0)
-            
-            while (self.current_step - self.start_step) < self.buffer_value * (self.end_step - self.start_step):
-                self.frame_batch_index = 0
-                
-                while self.frame_batch_index * (self.sequence_length - self.overlap_length) < self.train_dataset_length:
-                    start_idx = self.frame_batch_index * (self.sequence_length - self.overlap_length)
-                    end_idx = min(((self.frame_batch_index + 1) * (self.sequence_length - self.overlap_length) + self.overlap_length), self.train_dataset_length)
-                    
-                    current_indexs = sorted(list(range(start_idx, end_idx)))
-                    render_list = []
-                    original_list = []
-                    current_spots = []
-                    
-                    with self.model_lock:
-                        for i, current_index in enumerate(current_indexs):
-                            camera_transforms = self.datamanager.train_camera_optimizer(torch.tensor(current_index).unsqueeze(dim=0))
-                            current_camera = self.datamanager.train_dataparser_outputs.cameras[current_index].to(self.device)
-                            
-                            current_spot = int(torch.where(self.datamanager.image_batch["image_idx"] == torch.tensor(current_index))[0][0])
-                            current_spots.append(current_spot)
-                            
-                            original_img = self.datamanager.original_image_batch["image"][current_spot].to(self.device) # (H, W, 3)
-                            original_list.append(original_img)
-                            
-                            current_ray_bundle = current_camera.generate_rays(torch.tensor(list(range(1))).unsqueeze(-1), camera_opt_to_camera=camera_transforms)
-                            camera_outputs = self.model.get_outputs_for_camera_ray_bundle(current_ray_bundle)
-                            
-                            render_img = camera_outputs["rgb"] # (H, W, 3)
-                            render_list.append(render_img)
-                            
-                    # clear memory
-                    del camera_transforms, current_camera, current_ray_bundle, camera_outputs
-                    torch.cuda.empty_cache()
-                    
-                    render_images = torch.stack(render_list) # (N, H, W, 3)
-                    original_images = torch.stack(original_list) # (N, H, W, 3)
-                    
-                    render_images = rearrange(render_images, 'N H W C -> N C H W') # (N, C, H, W)
-                    original_images = rearrange(original_images, 'N H W C -> N C H W') # (N, C, H, W)
-                    
-                    torchvision.utils.save_image(render_images, f'images_render_{tag}.png', nrow=render_images.shape[0], padding=0)
-                    torchvision.utils.save_image(original_images, f'images_condition_{tag}.png', nrow=original_images.shape[0], padding=0)
-                    
-                    update_images = self.datamanager.image_batch["image"][current_spots].to(self.device) 
-                    update_images = rearrange(update_images, 'N H W C -> N C H W') # (N, C, H, W)
-                    
-                    # apply the optical flow warp
-                    for i in range(1, len(update_images)):
-                        ref_image = (update_images[[0]] * 255.0).float().to(self.ip2p_device) # (1, C, H, W)
-                        cur_image = (update_images[[i]] * 255.0).float().to(self.ip2p_device) # (1, C, H, W)
-                        
-                        ref_image_cond = (original_images[[0]] * 255.0).float().to(self.ip2p_device) # (1, C, H, W)
-                        cur_image_cond = (original_images[[i]] * 255.0).float().to(self.ip2p_device) # (1, C, H, W)
-                        
-                        padder = InputPadder(ref_image.shape) 
-                        ref_image, cur_image, ref_image_cond, cur_image_cond = padder.pad(ref_image, cur_image, ref_image_cond, cur_image_cond)
-                        
-                        _, flow_fwd_ref = self.raft(ref_image_cond, cur_image_cond, iters=20, test_mode=True) 
-                        _, flow_bwd_ref = self.raft(cur_image_cond, ref_image_cond, iters=20, test_mode=True)
-                    
-                        flow_fwd_ref = padder.unpad(flow_fwd_ref[0]).cpu().numpy().transpose(1, 2, 0) 
-                        flow_bwd_ref = padder.unpad(flow_bwd_ref[0]).cpu().numpy().transpose(1, 2, 0) 
-                        
-                        ref_image = padder.unpad(ref_image[0]).cpu().numpy().transpose(1, 2, 0).astype(np.uint8)
-                        cur_image = padder.unpad(cur_image[0]).cpu().numpy().transpose(1, 2, 0).astype(np.uint8)
-                        
-                        mask_bwd_ref = compute_bwd_mask(flow_fwd_ref, flow_bwd_ref) # (h, w)
-                        warp_to_cur_image_ref = warp_flow(ref_image, flow_bwd_ref) # (h, w, c)
-                        warp_to_cur_image = warp_to_cur_image_ref * mask_bwd_ref[..., None] + cur_image * (1 - mask_bwd_ref[..., None]) # (h, w, c)
-                        
-                        warp_to_cur_image = torch.from_numpy(warp_to_cur_image / 255.0)
-                        warp_to_cur_image = rearrange(warp_to_cur_image, 'H W C -> 1 C H W').to(update_images)
-                        
-                        if warp_to_cur_image.size()[-2:] != update_images.size()[-2:]:
-                            warp_to_cur_image = F.interpolate(warp_to_cur_image, size=update_images.size()[-2:], mode="bilinear", align_corners=False)
-                        
-                        update_images[[i]] = warp_to_cur_image.to(update_images)
-                            
-                    torchvision.utils.save_image(update_images, f'images_warped_{tag}.png', nrow=update_images.shape[0], padding=0)
-                    
-                    # use key frame image as the reference image
-                    update_images[0] = key_frame_edit_image[0].to(update_images) # (C, H, W)
-                    original_images[0] = key_frame_condition_image[0].to(original_images) # (C, H, W)
-                    
-                    if self.config.resize_512:
-                        height, width = update_images.size()[-2:]
-                        factor = 512 / max(height, width)
-                        factor = math.ceil(min(height, width) * factor / 64) * 64 / min(height, width)
-                        height = int((height * factor) // 64) * 64
-                        width = int((width * factor) // 64) * 64
-                        update_images = F.interpolate(update_images, size=(height, width), mode="bilinear", align_corners=False)
-                        original_images = F.interpolate(original_images, size=(height, width), mode="bilinear", align_corners=False)
-                    
-                    edited_images = self.ip2p.edit_sequence(
-                        images=update_images.to(self.ip2p_device), 
-                        images_cond=original_images.to(self.ip2p_device),
-                        guidance_scale=self.config.guidance_scale,
-                        image_guidance_scale=self.config.image_guidance_scale,
-                        diffusion_steps=5 if update_batch_index == 0 else 3,
-                        prompt=self.config.prompt,
-                        noisy_latent_type="noisy_latent",
-                        T=700 if update_batch_index == 0 else 550,
-                    ).to(update_images) # (N, C, H, W)
-                    
-                    torchvision.utils.save_image(edited_images, f'images_edited_{tag}.png', nrow=edited_images.shape[0], padding=0)
-                    
-                    if edited_images.size()[-2:] != self.datamanager.image_batch["image"].size()[1:-1]:
-                        edited_images = F.interpolate(edited_images, size=self.datamanager.image_batch["image"].size()[1:-1], mode="bilinear", align_corners=False) # (N, 3, H, W)
-                        
-                    with self.data_lock:
-                        for i, current_spot in enumerate(current_spots):
-                            if i == 0 and end_idx < self.train_dataset_length:
-                                continue
-                            elif i == 0 and end_idx >= self.train_dataset_length:
-                                current_spot = key_frame_spot
-                            else:
-                                current_spot = current_spot
-                            
-                            if update_batch_index == 0:
-                                self.datamanager.image_batch["image"][current_spot] = edited_images[i].squeeze().permute(1, 2, 0) # (H, W, 3)
-                            
-                    # batch index update
-                    self.frame_batch_index += 1
-                    
-                update_batch_index += 1
-                
-    
-    def init_start_step(self, step):
-        self.start_step = step
-        self.current_step = step
-                    
-    def init_end_step(self, step):
-        self.end_step = step
-        
-    def get_train_loss_dict(self, step: int):
-        """This function gets your training loss dict and performs image editing.
-        Args:
-            step: current iteration step to update sampler if using DDP (distributed)
-        """
-        
-        self.current_step = step # update current step
-
+        native = self.datamanager.image_batch["image"].shape[1:-1]
         with self.data_lock:
-            # if step % 10 == 0:
-            #     largest_index = max(self.frame_batch_index * (self.sequence_length - self.overlap_length), self.train_dataset_length-1)
-            #     current_index = random.randint(0, largest_index)
-            #     current_spot = int(torch.where(self.datamanager.image_batch["image_idx"] == torch.tensor(current_index))[0][0])
-            #     images = self.datamanager.image_batch["image"][current_spot].to(self.device)
-            #     cameras = self.datamanager.train_dataparser_outputs.cameras[current_index].to(
-            #         self.device)
-            #     scaling_factor = 512 / max(images.shape[:2])
-            #     cameras.rescale_output_resolution(scaling_factor=scaling_factor)
-            #     ray_bundle = cameras.generate_rays(
-            #         torch.tensor(list(range(1))).unsqueeze(-1)
-            #     ).flatten()
-                
-            #     height, width = images.size()[:2] # (H, W)
-            #     images = F.interpolate(images.unsqueeze(0).permute(0, 3, 1, 2), size=(int(height*scaling_factor), int(width*scaling_factor)), mode="bilinear", align_corners=False).squeeze(0).permute(1, 2, 0) # (H, W, 3)
-                
-            #     batch = {
-            #         "image": images.reshape(-1, 3)
-            #     }
-            # else:
-            ray_bundle, batch = self.datamanager.next_train(step)
-            
-        with self.model_lock:
-            model_outputs = self.model(ray_bundle)
-            metrics_dict = self.model.get_metrics_dict(model_outputs, batch)
+            self.datamanager.image_batch["image"][slot] = (
+                self.resize(edited, native)[0].permute(1, 2, 0)
+            )
+        return edited, condition
 
-        loss_dict = self.model.get_loss_dict(model_outputs, batch, metrics_dict)
-        
-        return model_outputs, loss_dict, metrics_dict
-    
+    def _edit_window(
+        self,
+        indices: List[int],
+        anchor: torch.Tensor,
+        anchor_cond: torch.Tensor,
+        key_frame: int,
+        is_last: bool,
+    ) -> None:
+        """Warp, repaint and write back one window of frames.
 
-    def forward(self):
-        """Not implemented since we only want the parameter saving of the nn module, but not forward()"""
-        raise NotImplementedError
-    
-    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True):
-        is_ddp_model_state = True
-        model_state = {}
-        for key, value in state_dict.items():
-            if key.startswith("_model."):
-                # remove the "_model." prefix from key
-                model_state[key[len("_model.") :]] = value
-                # make sure that the "module." prefix comes from DDP,
-                # rather than an attribute of the model named "module"
-                if not key.startswith("_model.module."):
-                    is_ddp_model_state = False
-        # remove "module." prefix added by DDP
-        if is_ddp_model_state:
-            model_state = {key[len("module.") :]: value for key, value in model_state.items()}
+        Windows overlap by ``overlap_length``, and slot 0 of each batch is given
+        over to the anchor rather than to the window's own first frame. That
+        frame is therefore covered by the *previous* window, and slot 0's output
+        belongs to the key frame instead.
+        """
+        slots = [self.batch_slot(i) for i in indices]
 
-        pipeline_state = {key: value for key, value in state_dict.items() if not key.startswith("_model.")}
-        self.model.load_state_dict(model_state, strict=False)
-        super().load_state_dict(pipeline_state, strict=False)
-        
-        
-def warp_flow(img, flow): 
-    # warp image according to flow
-    h, w = flow.shape[:2]
-    flow_new = flow.copy() 
-    flow_new[:, :, 0] += np.arange(w) 
-    flow_new[:, :, 1] += np.arange(h)[:, np.newaxis] 
+        originals = [
+            self.datamanager.original_image_batch["image"][slot].to(self.device) for slot in slots
+        ]
+        original_images = rearrange(torch.stack(originals), "n h w c -> n c h w")
+        current = rearrange(
+            self.datamanager.image_batch["image"][slots].to(self.device), "n h w c -> n c h w"
+        )
 
-    res = cv2.remap(
-        img, flow_new, None, cv2.INTER_CUBIC, borderMode=cv2.BORDER_CONSTANT
-    )
-    return res
+        if self.debug_enabled:
+            # The window is built from the stored training images, not from
+            # fresh renders, so this costs a full render per frame and is only
+            # worth paying to look at.
+            renders = torch.stack([self.render_view(index) for index in indices])
+            self._save_debug("window_render", rearrange(renders, "n h w c -> n c h w"))
 
-def compute_bwd_mask(fwd_flow, bwd_flow):
-    # compute the backward mask
-    alpha_1 = 0.5 
-    alpha_2 = 0.5
+        current = self._warp_window(current, original_images)
+        self._save_debug("window_warped", current)
 
-    fwd2bwd_flow = warp_flow(fwd_flow, bwd_flow)
-    bwd_lr_error = np.linalg.norm(bwd_flow + fwd2bwd_flow, axis=-1)
+        # Slot 0 is the anchor slot: replacing it with the edited key frame is
+        # what ties this window to the same appearance as every other one.
+        target = self._edit_resolution(current)
+        current = self.resize(current, target)
+        original_images = self.resize(original_images, target)
+        current[0] = self.resize(anchor, target)[0].to(current)
+        original_images[0] = self.resize(anchor_cond, target)[0].to(original_images)
 
-    bwd_mask = (
-        bwd_lr_error
-        < alpha_1
-        * (np.linalg.norm(bwd_flow, axis=-1) + np.linalg.norm(fwd2bwd_flow, axis=-1))
-        + alpha_2
-    )
+        edited = self.ip2p.edit_sequence(
+            images=current.to(self.ip2p_device),
+            images_cond=original_images.to(self.ip2p_device),
+            prompt=self.config.prompt,
+            guidance_scale=self.config.guidance_scale,
+            image_guidance_scale=self.config.image_guidance_scale,
+            diffusion_steps=self.config.refine_diffusion_steps,
+            noisy_latent_type="noisy_latent",
+            T=self.config.refine_num_steps,
+        ).to(current)
+        self._save_debug("window_edited", edited)
 
-    return bwd_mask
-    
+        native = self.datamanager.image_batch["image"].shape[1:-1]
+        edited = self.resize(edited, native)
+        with self.data_lock:
+            for position, slot in enumerate(slots):
+                if position == 0:
+                    if not is_last:
+                        # Slot 0 carried the anchor, and this window's own first
+                        # frame was already written by the previous window.
+                        continue
+                    # On the final window nothing comes after, so slot 0's
+                    # output is folded back into the key frame it came from.
+                    slot = self.batch_slot(key_frame)
+                self.datamanager.image_batch["image"][slot] = edited[position].permute(1, 2, 0)
+
+    def _warp_window(self, current: torch.Tensor, conditions: torch.Tensor) -> torch.Tensor:
+        """Warp the window's first frame onto the rest with optical flow.
+
+        Flow is estimated on the *unedited* frames: the edit changes colours
+        everywhere, which would confound a photometric flow estimator, while the
+        underlying motion is the same either way.
+        """
+        warped = current.clone()
+        reference = (current[:1] * 255.0).float().to(self.ip2p_device)
+        reference_cond = (conditions[:1] * 255.0).float().to(self.ip2p_device)
+
+        for i in range(1, len(current)):
+            frame = (current[i : i + 1] * 255.0).float().to(self.ip2p_device)
+            frame_cond = (conditions[i : i + 1] * 255.0).float().to(self.ip2p_device)
+
+            forward, backward = estimate_flow_pair(self.raft, reference_cond, frame_cond)
+            reliable = consistency_mask(backward, forward)
+
+            ref_np = reference[0].permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+            cur_np = frame[0].permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+            blended = blend_with_mask(warp_by_flow(ref_np, backward), cur_np, reliable)
+
+            result = rearrange(torch.from_numpy(blended / 255.0), "h w c -> 1 c h w").to(current)
+            warped[i] = self.resize(result, current.shape[-2:])[0]
+        return warped
+
+    def _edit_resolution(self, images: torch.Tensor):
+        """Resolution to run the diffusion model at for this batch."""
+        if not self.config.resize_512:
+            return images.shape[-2:]
+        return self.diffusion_resolution(*images.shape[-2:])
+
+    @property
+    def debug_enabled(self) -> bool:
+        return self.config.save_debug_images
+
+    def _save_debug(self, name: str, images: torch.Tensor) -> None:
+        if not self.debug_enabled:
+            return
+        tag = self.config.prompt.strip().split(" ")[-1].strip("?!.,")
+        torchvision.utils.save_image(
+            images.float(), f"{name}_{tag}.png", nrow=images.shape[0], padding=0
+        )

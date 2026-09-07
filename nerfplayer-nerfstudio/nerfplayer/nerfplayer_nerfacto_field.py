@@ -138,11 +138,11 @@ class TemporalHashMLPDensityField(Field):
         positions_flat = positions.view(-1, 3)
         assert ray_samples.times is not None
         time_flat = ray_samples.times.reshape(-1, 1)
-        # import ipdb; ipdb.set_trace() # DEBUG
+        # Gradient checkpointing: the temporal grid encoder holds large
+        # intermediate activations, and recomputing them costs less than the
+        # memory they would otherwise occupy.
         x = checkpoint.checkpoint(self.encoding, positions_flat, time_flat).to(positions)
         density_before_activation = checkpoint.checkpoint(self.linear, x).view(*ray_samples.frustums.shape, -1)
-        # x = self.encoding(positions_flat, time_flat).to(positions)
-        # density_before_activation = self.linear(x).view(*ray_samples.frustums.shape, -1)
 
         # Rectifying the density with an exponential is much more stable than a ReLU or
         # softplus, because it enables high post-activation (float32) density outputs

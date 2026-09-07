@@ -19,7 +19,6 @@ Instruct-NeRF2NeRF Datamanager.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import torch
 from typing import Dict, Tuple, Type
 
 from rich.progress import Console

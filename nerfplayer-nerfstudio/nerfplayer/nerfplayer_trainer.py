@@ -15,34 +15,31 @@
 """
 Code to train model, only needed in order to not save InstructPix2Pix checkpoints
 """
-from dataclasses import dataclass, field
-from typing import Type, Dict, Tuple, cast
-import functools
-import torch
-from nerfstudio.engine.trainer import Trainer, TrainerConfig
-from nerfstudio.viewer.server.viewer_elements import ViewerButton
-from nerfstudio.utils.decorators import check_main_thread
-
+import datetime
+import os
+import shutil
+import sys
 import time
-from tqdm import tqdm
 from dataclasses import dataclass, field
+from typing import Optional, Type
+
+import imageio
+import torch
+from PIL import Image
 from rich import box, style
 from rich.panel import Panel
 from rich.table import Table
+from tqdm import tqdm
 
 from nerfstudio.data.datamanagers.base_datamanager import VanillaDataManager
 from nerfstudio.engine.callbacks import TrainingCallbackLocation
+from nerfstudio.engine.trainer import Trainer, TrainerConfig
 from nerfstudio.utils.decorators import check_main_thread
 from nerfstudio.utils.misc import step_check
 from nerfstudio.utils.rich_utils import CONSOLE
+from nerfstudio.viewer.server.viewer_elements import ViewerButton
 
-import threading
-import datetime, os, sys
-from PIL import Image
-import imageio
-import shutil
-
-TRAIN_INTERATION_OUTPUT = Tuple[torch.Tensor, Dict[str, torch.Tensor], Dict[str, torch.Tensor]]
+from instruct4d.utils import BackgroundTask
 
 @dataclass
 class NerfplayerTrainerConfig(TrainerConfig):
@@ -83,8 +80,12 @@ class NerfplayerTrainer(Trainer):
             )
             
         if self.config.render_mode:
+            # Render-only: produce the video, then drop the run directory
+            # nerfstudio just created, since no checkpoint will be written into
+            # it. `base_dir` is this run's own timestamped directory.
             self.render_video()
-            shutil.rmtree(self.base_dir) # delete checkpoint dir
+            if self.base_dir.exists():
+                shutil.rmtree(self.base_dir)
             sys.exit()
             
         self._init_viewer_state()
@@ -94,13 +95,12 @@ class NerfplayerTrainer(Trainer):
         self.pipeline.init_start_step(self._start_step) 
         self.pipeline.init_end_step(self._start_step + num_iterations) 
         
-        ########## Debugging ##########
-        # self.pipeline.test_edit()
-        # import sys; sys.exit()
-        ##########    EXIT   ##########
-        
-        self.dataset_update_thread = threading.Thread(target=self.pipeline.test_edit, name="Dataset Update Thread") # dataset update thread
-        self.dataset_update_thread.start() # start dataset update thread
+        # Editing runs alongside optimisation: the field keeps training against
+        # whatever frames have been edited so far, rather than waiting for the
+        # whole sequence.
+        self.dataset_update_thread = BackgroundTask(
+            self.pipeline.test_edit, name="dataset-update"
+        ).start()
         
         pbar = tqdm(range(self._start_step, self._start_step + num_iterations), desc="Training")
         for step in pbar:
@@ -186,24 +186,31 @@ class NerfplayerTrainer(Trainer):
                 if f != ckpt_path:
                     f.unlink()
                     
-    def render_video(self, n_sample_frames: int = None, sample_frame_rate: int = 1):
-        frames_dir = os.path.join('./video_frames', self.config.experiment_name)
+    def render_video(self, n_sample_frames: Optional[int] = None, sample_frame_rate: int = 1) -> None:
+        """Render every training view and mux them into a video.
+
+        Output goes under the run's own directory, so a render never scatters
+        files into whatever directory ns-train happened to be launched from.
+
+        Args:
+            n_sample_frames: Render at most this many frames.
+            sample_frame_rate: Render every Nth frame.
+        """
+        tag = self.pipeline.config.prompt.strip().split(" ")[-1].strip("?!.,")
+        frames_dir = os.path.join(str(self.base_dir), "video_frames", tag)
         os.makedirs(frames_dir, exist_ok=True)
-        video_dir = os.path.join('./render_videos', self.config.experiment_name)
+        video_dir = os.path.join(str(self.base_dir), "renders")
         os.makedirs(video_dir, exist_ok=True)
-        
-        # set model to eval mode
+
         self.pipeline.model.training = False
         self.pipeline.model.eval()
-        
-        tag = self.pipeline.config.prompt.split(' ')[-1].replace('?','') 
         
         frames = []
         cameras = self.pipeline.datamanager.train_dataparser_outputs.cameras
         sample_index = list(range(0, cameras.shape[0], sample_frame_rate))
         sample_index = sample_index[:n_sample_frames] if n_sample_frames else sample_index
         
-        for img_idx in tqdm(sample_index, desc=f"Rendering scene"):
+        for img_idx in tqdm(sample_index, desc="Rendering scene"):
             img_idx = torch.tensor(img_idx)
             camera_transforms = self.pipeline.datamanager.train_camera_optimizer(img_idx.unsqueeze(dim=0))
             current_camera = cameras[img_idx].to(self.device)
@@ -219,14 +226,11 @@ class NerfplayerTrainer(Trainer):
                 .numpy()
             )
             
-            frame_dir_path = os.path.join(frames_dir, tag)
-            os.makedirs(frame_dir_path, exist_ok=True)
-            Image.fromarray(preds_rgb).save(f"{frame_dir_path}/{img_idx.item()}.png")
+            Image.fromarray(preds_rgb).save(f"{frames_dir}/{img_idx.item():04d}.png")
             frames.append(preds_rgb)
 
-        video_dir_path = os.path.join(video_dir, tag)
-        os.makedirs(video_dir_path, exist_ok=True)
-        video_path = os.path.join(video_dir_path, f"{str(datetime.datetime.now().strftime('%d_%H%M'))}_rendering.mp4")
+        stamp = datetime.datetime.now().strftime("%d_%H%M")
+        video_path = os.path.join(video_dir, f"{tag}_{stamp}.mp4")
         imageio.mimwrite(video_path, frames, fps=30)
         
         CONSOLE.print(f"Saved rendering path with {len(frames)} frames to {video_path}")
