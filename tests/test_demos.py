@@ -124,3 +124,38 @@ def test_readme_commands_match_the_argument_parsers(command, monkeypatch):
         spec.loader.exec_module(module)     # module body only; main() is guarded
         parsed = module.parse_args()
     assert parsed.prompt
+
+
+def test_compat_shim_resolves_the_moved_diffusers_symbols():
+    """The pseudo-3D UNet forks diffusers internals, and several of the names it
+    needs moved between releases. The shim must find them wherever they live."""
+    from instruct4d.ip2p import _compat
+
+    assert callable(_compat.maybe_allow_in_graph)
+    assert callable(_compat.randn_tensor)
+    assert isinstance(_compat.HF_HUB_OFFLINE, bool)
+
+
+def test_compat_shim_drops_unsupported_keyword_arguments():
+    """`use_auth_token` became `token` and `resume_download` went away, so one
+    call site has to serve several signatures."""
+    from instruct4d.ip2p._compat import call_supported
+
+    def modern(checkpoint_file, token=None):
+        return ("modern", checkpoint_file, token)
+
+    def legacy(checkpoint_file, use_auth_token=None, resume_download=False):
+        return ("legacy", checkpoint_file, use_auth_token)
+
+    assert call_supported(modern, checkpoint_file="f", token="t",
+                          use_auth_token="t", resume_download=True) == ("modern", "f", "t")
+    assert call_supported(legacy, checkpoint_file="f", token="t",
+                          use_auth_token="t", resume_download=True) == ("legacy", "f", "t")
+
+
+def test_compat_shim_passes_everything_to_a_var_keyword_callable():
+    from instruct4d.ip2p._compat import call_supported
+
+    seen = {}
+    call_supported(lambda **kw: seen.update(kw), anything=1, at_all=2)
+    assert seen == {"anything": 1, "at_all": 2}

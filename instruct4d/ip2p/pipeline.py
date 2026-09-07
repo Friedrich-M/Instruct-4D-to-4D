@@ -8,24 +8,21 @@ import torch
 from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer
 
 from diffusers.image_processor import VaeImageProcessor
-from diffusers.loaders import LoraLoaderMixin, TextualInversionLoaderMixin
+from diffusers.loaders import TextualInversionLoaderMixin
 from diffusers.models import AutoencoderKL, UNet2DConditionModel
 from diffusers.schedulers import KarrasDiffusionSchedulers
 from diffusers.utils import (
-    PIL_INTERPOLATION,
+    BaseOutput,
     deprecate,
     is_accelerate_available,
     is_accelerate_version,
     logging,
-    randn_tensor,
-    BaseOutput,
 )
+from diffusers.pipelines import DiffusionPipeline
 
 from einops import rearrange
 
-from diffusers.pipelines import DiffusionPipeline
-from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
-from diffusers.pipelines.stable_diffusion.safety_checker import StableDiffusionSafetyChecker
+from ._compat import randn_tensor
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -61,7 +58,7 @@ def preprocess(image):
 class InstructPix2PixOutput(BaseOutput):
     videos: Union[torch.Tensor, np.ndarray]
 
-class InstructPix2PixPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMixin):
+class InstructPix2PixPipeline(DiffusionPipeline, TextualInversionLoaderMixin):
     _optional_components = ["safety_checker", "feature_extractor"]
 
     def __init__(

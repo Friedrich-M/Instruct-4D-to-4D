@@ -37,13 +37,13 @@ from .blocks import (
 )
 from .resnet import InflatedConv3d
 from diffusers.utils import (
-    DIFFUSERS_CACHE,
-    HF_HUB_OFFLINE,
     SAFETENSORS_WEIGHTS_NAME,
     _add_variant,
     _get_model_file,
     logging,
 )
+
+from ._compat import DEFAULT_CACHE, HF_HUB_OFFLINE, call_supported
 
 from diffusers.models.modeling_utils import load_state_dict
 
@@ -509,24 +509,28 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         pretrained_model_path: Optional[Union[str, os.PathLike]],
         **kwargs
     ):
-        cache_dir = kwargs.pop("cache_dir", DIFFUSERS_CACHE)
+        cache_dir = kwargs.pop("cache_dir", DEFAULT_CACHE)
         force_download = kwargs.pop("force_download", False)
         local_files_only = kwargs.pop("local_files_only", HF_HUB_OFFLINE)
-        use_auth_token = kwargs.pop("use_auth_token", None)
+        token = kwargs.pop("token", kwargs.pop("use_auth_token", None))
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", None)
         variant = kwargs.pop("variant", None)
         self_attention = kwargs.pop("self_attention", DEFAULT_SELF_ATTENTION)
         
-        config = cls.load_config(
+        # Argument names here have shifted between diffusers releases
+        # (`use_auth_token` became `token`, `resume_download` was dropped), so
+        # every call below passes through `call_supported`.
+        config = call_supported(
+            cls.load_config,
             pretrained_model_name_or_path=pretrained_model_path,
             subfolder=subfolder,
             return_unused_kwargs=False,
             return_commit_hash=False,
-            resume_download=force_download,
             proxies=force_download,
             local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
+            use_auth_token=token,
+            token=token,
         )
             
         config["_class_name"] = cls.__name__
@@ -552,15 +556,16 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
             "framework": "pytorch",
         }
         
-        model_file = _get_model_file(
-            pretrained_model_path,
+        model_file = call_supported(
+            _get_model_file,
+            pretrained_model_name_or_path=pretrained_model_path,
             weights_name=_add_variant(SAFETENSORS_WEIGHTS_NAME, variant),
             cache_dir=cache_dir,
             force_download=force_download,
-            resume_download=force_download,
             proxies=force_download,
             local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
+            use_auth_token=token,
+            token=token,
             revision=revision,
             subfolder=subfolder,
             user_agent=user_agent,
@@ -572,7 +577,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         # inflated convolutions and anchor-aware attention reuse the same
         # weights, only the way they are applied changes.  A strict load is
         # therefore the check that the inflation stayed weight-compatible.
-        state_dict = load_state_dict(model_file, variant=variant)
+        state_dict = call_supported(load_state_dict, checkpoint_file=model_file, variant=variant)
         model.load_state_dict(state_dict, strict=True)
 
         return model

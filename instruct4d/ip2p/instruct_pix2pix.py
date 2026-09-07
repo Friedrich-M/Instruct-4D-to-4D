@@ -68,13 +68,19 @@ class InstructPix2Pix(nn.Module):
         self.num_train_timesteps = num_train_timesteps
         self.ip2p_use_full_precision = ip2p_use_full_precision
 
-        pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(IP2P_SOURCE, torch_dtype=torch.float16, safety_checker=None)
+        pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+            IP2P_SOURCE, torch_dtype=torch.float16, safety_checker=None
+        )
         pipe.scheduler = DDIMScheduler.from_pretrained(DDIM_SOURCE, subfolder="scheduler")
         pipe.scheduler.set_timesteps(100)
-        assert pipe is not None
         pipe = pipe.to(self.device)
-        
-        pipe.enable_xformers_memory_efficient_attention()
+
+        # Optional: recent PyTorch has fused attention of its own, so xformers
+        # only helps on older builds. Not having it is not an error.
+        try:
+            pipe.enable_xformers_memory_efficient_attention()
+        except Exception:
+            pipe.enable_attention_slicing()
 
         self.pipe = pipe
 

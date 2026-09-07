@@ -1,30 +1,31 @@
-# Install PyTorch first, matched to your CUDA version:
-#   pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 \
-#       --index-url https://download.pytorch.org/whl/cu118
+# Install PyTorch first, matched to your CUDA build. Use 2.13 or newer: earlier
+# releases carry known advisories. Pick the right wheel index from
+# https://pytorch.org/get-started/locally/
+#   pip install "torch>=2.13" torchvision
 
-# Diffusion stack. These three are pinned together: the anchor-aware UNet is
-# built against the diffusers 0.19 model API, which later releases changed.
-diffusers==0.19.0
-transformers==4.31.0
-accelerate==0.21.0
-xformers==0.0.22
+# Diffusion stack. The pseudo-3D UNet reaches into diffusers internals that have
+# moved between releases; instruct4d/ip2p/_compat.py bridges those, and the code
+# is verified against diffusers 0.19 through 0.40.
+diffusers>=0.38.0
+transformers>=5.10.0
+accelerate>=1.14.0
 
 # Geometry and mesh export
-plyfile==1.0.1
-scikit-image==0.19.3
+plyfile>=1.0.1
+scikit-image>=0.19.3
 
 # Image and video IO
-opencv-python==4.6.0.66
-imageio-ffmpeg==0.4.8
+opencv-python>=4.8.1.78
+imageio-ffmpeg>=0.4.8
 
 # Metrics
-lpips==0.1.4
+lpips>=0.1.4
 
 # Configuration, logging and utilities
-ConfigArgParse==1.7
-mmengine==0.10.4
-einops==0.6.1
-jaxtyping==0.2.19
-rich==13.4.2
-tensorboard==2.13.0
-tqdm==4.65.0
+ConfigArgParse>=1.7
+mmengine>=0.10.4
+einops>=0.6.1
+jaxtyping>=0.2.19
+rich>=13.4.2
+tensorboard>=2.13.0
+tqdm>=4.66.3

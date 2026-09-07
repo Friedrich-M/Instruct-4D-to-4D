@@ -55,7 +55,7 @@ nerfplayer-nerfstudio/ the single-view setting, on a NeRFPlayer backbone
 
 ## 🔧 Installation
 
-The two settings need **separate environments**. NeRFStudio 0.3.2 hard-pins `diffusers==0.16.1`, while the anchor-aware UNet needs `diffusers>=0.17`, so one environment cannot satisfy both. They share the `instruct4d` library, which is installed into each.
+The two settings need **separate environments**. NeRFStudio 0.3.2 pins `diffusers==0.16.1`, which predates the API the anchor-aware UNet is built on, so one environment cannot serve both. They share the `instruct4d` library, which is installed into each.
 
 ```bash
 git clone https://github.com/Friedrich-M/Instruct-4D-to-4D.git
@@ -65,34 +65,31 @@ cd Instruct-4D-to-4D
 ### Multi-view setting
 
 ```bash
-conda create -n instruct4d python=3.8 && conda activate instruct4d
+conda create -n instruct4d python=3.10 && conda activate instruct4d
 
-# Match the CUDA build to your driver.
-pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 \
-    --index-url https://download.pytorch.org/whl/cu118
+# Pick the wheel matching your CUDA build from https://pytorch.org/get-started/locally/
+pip install "torch>=2.13" torchvision
 
 pip install -r requirements.txt
 pip install -e .
 ```
 
-`diffusers`, `transformers` and `accelerate` are pinned together: the anchor-aware UNet is built against the diffusers 0.19 model API, which later releases changed.
+The requirements set floors rather than exact pins, so the install picks up security fixes. The pseudo-3D UNet reaches into diffusers internals that have moved between releases; `instruct4d/ip2p/_compat.py` bridges those, and the editing path is tested against diffusers 0.19 through 0.40.
 
 ### Single-view setting
 
-Install NeRFStudio and the NeRFPlayer backbone, then restore the diffusers version the anchor-aware UNet needs. NeRFStudio only uses its older diffusers in `nerfstudio.generative` (the Generfacto text-to-3D method), which this repository never touches, so the override is safe. See the [NeRFStudio](https://github.com/nerfstudio-project/nerfstudio) repository for the full backbone instructions.
+Install NeRFStudio and the NeRFPlayer backbone, then move diffusers back up to a version the anchor-aware UNet supports. NeRFStudio only uses its older diffusers in `nerfstudio.generative` (the Generfacto text-to-3D method), which this repository never touches, so the override is safe. See the [NeRFStudio](https://github.com/nerfstudio-project/nerfstudio) repository for the full backbone instructions.
 
 ```bash
-conda create -n instruct4d-sv python=3.8 && conda activate instruct4d-sv
+conda create -n instruct4d-sv python=3.10 && conda activate instruct4d-sv
 
-pip install torch==2.0.1+cu118 torchvision==0.15.2+cu118 \
-    --index-url https://download.pytorch.org/whl/cu118
-
+pip install "torch>=2.13" torchvision
 pip install ninja git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
 pip install -e nerfplayer-nerfstudio   # pulls nerfstudio 0.3.2
 pip install -e .                       # the shared instruct4d library
 
-# nerfstudio downgrades these; the anchor-aware UNet needs them back.
-pip install --no-deps --upgrade diffusers==0.19.0 transformers==4.31.0 accelerate==0.21.0
+# nerfstudio pins an older diffusers for a method this repository does not use.
+pip install --no-deps --upgrade -r requirements.txt
 ```
 
 ### RAFT weights
